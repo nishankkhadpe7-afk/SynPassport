@@ -1,0 +1,35 @@
+id: ml-sensitive-v1
+version: 1
+name: Sensitive ML Profile v1
+description: High-assurance profile for sensitive downstream modeling and clinical ML deployments.
+requires:
+  schema_validity: pass
+  marginal_fidelity:
+    min: 0.90
+  correlation_fidelity:
+    min: 0.85
+  utility_tstr_ratio:
+    min: 0.90
+  subgroup_utility_ci_width:
+    max: 0.15
+  privacy_dcr_vs_holdout: not_closer_than_holdout
+  membership_inference_auc:
+    max: 0.55
+budget:
+  max_candidates: 3
+  max_repairs: 2
+uses:
+  software_testing:
+    - schema_validity
+    - marginal_fidelity
+  ml_prototyping:
+    - schema_validity
+    - marginal_fidelity
+    - correlation_fidelity
+    - utility_tstr_ratio
+  clinical_ml:
+    - all
+warning_bands:
+  utility_tstr_ratio:
+    min: 0.85
+human_approval: required

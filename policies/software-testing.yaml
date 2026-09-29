@@ -1,0 +1,19 @@
+id: software-testing
+version: 1
+name: Software Testing Profile
+description: Assurance profile for non-production functional and integration testing.
+requires:
+  schema_validity: pass
+  marginal_fidelity:
+    min: 0.80
+budget:
+  max_candidates: 3
+  max_repairs: 2
+uses:
+  software_testing:
+    - schema_validity
+    - marginal_fidelity
+warning_bands:
+  marginal_fidelity:
+    min: 0.70
+human_approval: optional

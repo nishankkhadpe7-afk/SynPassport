@@ -1,0 +1,12 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "extraPaths": [
+    "src"
+  ],
+  "pythonPath": "C:\\Users\\Nishank\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": false
+}

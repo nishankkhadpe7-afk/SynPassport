@@ -1,0 +1,17 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_PATH=/app/data/synpassport.db
+      - SIGNING_KEY_PATH=/app/keys/ed25519_signing_key.pem
+      - GLOBAL_SEED=1234
+      - SYNPASSPORT_REPLAY=0
+    volumes:
+      - ./data:/app/data
+      - ./keys:/app/keys
+      - ./policies:/app/policies
+      - ./replay:/app/replay

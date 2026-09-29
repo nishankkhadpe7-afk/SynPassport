@@ -1,0 +1,23 @@
+name: "SynPassport Verification Gate"
+description: "Verifies Evidence Passport signatures, dataset hashes, and purpose-bound approval status"
+inputs:
+  dataset:
+    description: "Path to the synthetic dataset file"
+    required: true
+  passport:
+    description: "Path to the Evidence Passport JSON file"
+    required: true
+  purpose:
+    description: "Intended use to verify against policy verdicts"
+    required: true
+  allow-warning:
+    description: "Permit WARNING status as acceptable for intended use"
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Run SynPassport Verification
+      shell: bash
+      run: |
+        passport verify "${{ inputs.dataset }}" "${{ inputs.passport }}" --purpose "${{ inputs.purpose }}"

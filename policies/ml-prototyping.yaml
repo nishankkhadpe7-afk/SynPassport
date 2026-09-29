@@ -1,0 +1,32 @@
+id: ml-prototyping
+version: 1
+name: ML Prototyping Profile
+description: Assurance profile for internal exploratory data science and feature prototyping.
+requires:
+  schema_validity: pass
+  marginal_fidelity:
+    min: 0.85
+  correlation_fidelity:
+    min: 0.80
+  utility_tstr_ratio:
+    min: 0.80
+budget:
+  max_candidates: 3
+  max_repairs: 2
+uses:
+  software_testing:
+    - schema_validity
+    - marginal_fidelity
+  ml_prototyping:
+    - schema_validity
+    - marginal_fidelity
+    - correlation_fidelity
+    - utility_tstr_ratio
+warning_bands:
+  marginal_fidelity:
+    min: 0.75
+  correlation_fidelity:
+    min: 0.70
+  utility_tstr_ratio:
+    min: 0.75
+human_approval: optional
