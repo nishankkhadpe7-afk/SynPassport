@@ -129,9 +129,7 @@ class CorrelationFidelityCheck(BaseCheck):
                 cats, uniques = pd.factorize(real_data[col].astype(str))
                 cat_map = {val: idx for idx, val in enumerate(uniques)}
                 r_num[col] = cats
-                s_num[col] = synth_data[col].astype(str).map(
-                    lambda x, m=cat_map: m.get(x, -1)
-                )
+                s_num[col] = synth_data[col].astype(str).map(lambda x, m=cat_map: m.get(x, -1))
 
         corr_real = r_num.corr().fillna(0.0).to_numpy()
         corr_synth = s_num.corr().fillna(0.0).to_numpy()

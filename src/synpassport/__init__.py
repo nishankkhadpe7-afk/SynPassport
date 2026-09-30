@@ -3,5 +3,7 @@
 Issues signed, hash-bound Evidence Passports with deterministic policy enforcement.
 """
 
+from synpassport.sdk import PassportError, VerificationResult, load_dataset, verify
+
 __version__ = "0.1.0"
-__all__ = ["__version__"]
+__all__ = ["PassportError", "VerificationResult", "__version__", "load_dataset", "verify"]

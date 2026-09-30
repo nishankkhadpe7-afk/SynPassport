@@ -190,9 +190,7 @@ def build_passport(
             else candidates_evaluated
         ),
         "repairs_attempted": (
-            run_info.get("repairs_attempted", repairs_attempted)
-            if run_info
-            else repairs_attempted
+            run_info.get("repairs_attempted", repairs_attempted) if run_info else repairs_attempted
         ),
     }
 
@@ -263,9 +261,7 @@ def approve_passport(
             key_id = compute_key_id(pub_key)
         except Exception:
             key_id = (
-                current_sig.get("key_id", "unknown")
-                if isinstance(current_sig, dict)
-                else "unknown"
+                current_sig.get("key_id", "unknown") if isinstance(current_sig, dict) else "unknown"
             )
 
     new_sig_b64 = sign_payload(data, signing_key)

@@ -1,3 +1,6 @@
 """FastAPI backend service package."""
 
-__all__: list[str] = []
+from synpassport.api.main import app
+
+__all__ = ["app"]
+

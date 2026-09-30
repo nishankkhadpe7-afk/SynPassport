@@ -1,3 +1,5 @@
 """Command-line interface package for SynPassport."""
 
-__all__: list[str] = []
+from synpassport.cli.main import main
+
+__all__ = ["main"]

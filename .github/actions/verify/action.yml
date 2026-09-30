@@ -14,10 +14,21 @@ inputs:
     description: "Permit WARNING status as acceptable for intended use"
     required: false
     default: "false"
+  public-key:
+    description: "Optional path to Ed25519 public key file"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
     - name: Run SynPassport Verification
       shell: bash
       run: |
-        passport verify "${{ inputs.dataset }}" "${{ inputs.passport }}" --purpose "${{ inputs.purpose }}"
+        EXTRA_ARGS=""
+        if [ "${{ inputs.allow-warning }}" = "true" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS --allow-warning"
+        fi
+        if [ -n "${{ inputs.public-key }}" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS --public-key ${{ inputs.public-key }}"
+        fi
+        python -m synpassport.cli.main verify "${{ inputs.dataset }}" "${{ inputs.passport }}" --purpose "${{ inputs.purpose }}" $EXTRA_ARGS

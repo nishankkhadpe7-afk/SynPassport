@@ -1,3 +1,6 @@
 """Mission definition and validation package."""
 
-__all__: list[str] = []
+from synpassport.mission.schema import Mission
+
+__all__ = ["Mission"]
+

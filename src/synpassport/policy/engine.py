@@ -5,6 +5,7 @@ verdicts (PASS, WARNING, FAIL, INSUFFICIENT_EVIDENCE) per intended use.
 Missing or errored evidence yields INSUFFICIENT_EVIDENCE and never PASS.
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 from synpassport.policy.models import SEVERITY_ORDER, CheckState, PolicyProfile
@@ -61,16 +62,27 @@ class EvaluationBundle:
         self.check_evaluations = check_evaluations
 
 
-def _find_evidence_record(check_id: str, evidence: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _find_evidence_record(check_id: str, evidence: Sequence[Any]) -> dict[str, Any] | None:
     """Find matching evidence record by check_id or aliases."""
-    for record in evidence:
+    normalized_evidence: list[dict[str, Any]] = []
+    for r in evidence:
+        if isinstance(r, dict):
+            normalized_evidence.append(r)
+        elif hasattr(r, "to_dict") and callable(r.to_dict):
+            normalized_evidence.append(r.to_dict())
+        elif hasattr(r, "model_dump") and callable(r.model_dump):
+            normalized_evidence.append(r.model_dump())
+        elif hasattr(r, "__dict__"):
+            normalized_evidence.append(dict(r.__dict__))
+
+    for record in normalized_evidence:
         cid = record.get("check_id") or record.get("check")
         if cid == check_id:
             return record
 
     # Derived alias for subgroup utility CI width if recorded under subgroup_utility
     if check_id == "subgroup_utility_ci_width":
-        for record in evidence:
+        for record in normalized_evidence:
             cid = record.get("check_id") or record.get("check")
             if cid in ("subgroup_utility", "subgroup_utility_ci"):
                 ci_low = record.get("ci_low")
@@ -540,7 +552,7 @@ def aggregate_use_verdict(check_states: list[CheckState]) -> CheckState:
 
 def evaluate_policy_detailed(
     policy_data: dict[str, Any] | PolicyProfile,
-    evidence: list[dict[str, Any]],
+    evidence: Sequence[dict[str, Any] | Any],
 ) -> EvaluationBundle:
     """Evaluate policy deterministically, returning detailed evaluations and verdicts."""
     policy = policy_data if isinstance(policy_data, PolicyProfile) else PolicyProfile(**policy_data)
@@ -594,7 +606,7 @@ def evaluate_policy_detailed(
 
 def evaluate_policy(
     policy: dict[str, Any] | PolicyProfile,
-    evidence: list[dict[str, Any]],
+    evidence: Sequence[dict[str, Any] | Any],
 ) -> dict[str, str]:
     """Pure function mapping policy and evidence to per-use verdicts.
 

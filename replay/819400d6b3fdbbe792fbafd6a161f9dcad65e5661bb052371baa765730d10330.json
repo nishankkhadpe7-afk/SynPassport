@@ -1,0 +1,121 @@
+{
+  "best_candidate_id": "candidate_001",
+  "candidates_evaluated": 1,
+  "repairs_attempted": 0,
+  "verdicts": {
+    "software_testing": "FAIL"
+  },
+  "repairs": [],
+  "agent_rejections": [],
+  "explanation": {
+    "summary": "Check 'schema_validity' evaluated to 1.0000 vs threshold pass -> PASS [evidence:schema_validity]\nCheck 'marginal_fidelity' evaluated to 0.5625 vs threshold {'min': 0.8} -> None [evidence:marginal_fidelity]",
+    "claims": [
+      {
+        "statement": "Check 'schema_validity' evaluated to 1.0000 vs threshold pass -> PASS",
+        "evidence_id": "schema_validity",
+        "state": "PASS",
+        "cited": true
+      },
+      {
+        "statement": "Check 'marginal_fidelity' evaluated to 0.5625 vs threshold {'min': 0.8} -> None",
+        "evidence_id": "marginal_fidelity",
+        "state": null,
+        "cited": true
+      }
+    ],
+    "flagged_claims": []
+  },
+  "passport": {
+    "passport_version": "0.1.0",
+    "dataset": {
+      "name": "candidate_001.csv",
+      "sha256": "6806a8c347578aaadddda6c0389ad8098029e4417f85e5bade4b53f3b9815790"
+    },
+    "mission": {
+      "purpose": "test",
+      "intended_uses": [
+        "software_testing"
+      ]
+    },
+    "policy": {
+      "id": "software-testing",
+      "sha256": "4a17a6fb63292a9bedb1df409fe624b30d614ce3fcec51ed32b0e766b67b98be"
+    },
+    "run": {
+      "code_version": "git:ac8862f8f682",
+      "seeds": [
+        1234
+      ],
+      "candidates_evaluated": 1,
+      "repairs_attempted": 0
+    },
+    "evidence": [
+      {
+        "run_id": "run_35eb9dcb",
+        "candidate_id": "candidate_001",
+        "check_id": "schema_validity",
+        "value": 1.0,
+        "ci_low": null,
+        "ci_high": null,
+        "n": 12,
+        "threshold_ref": "pass",
+        "seed": 1234,
+        "code_version": "git:0.1.0",
+        "state": "PASS",
+        "metadata": {
+          "column_reports": {
+            "age": {
+              "valid_fraction": 1.0
+            },
+            "cholesterol": {
+              "valid_fraction": 1.0
+            },
+            "resting_bp": {
+              "valid_fraction": 1.0
+            },
+            "target": {
+              "valid_fraction": 1.0
+            }
+          }
+        },
+        "created_at": "2026-09-30T03:53:06.295523+00:00"
+      },
+      {
+        "run_id": "run_35eb9dcb",
+        "candidate_id": "candidate_001",
+        "check_id": "marginal_fidelity",
+        "value": 0.5625,
+        "ci_low": null,
+        "ci_high": null,
+        "n": 12,
+        "threshold_ref": "{'min': 0.8}",
+        "seed": 1234,
+        "code_version": "git:0.1.0",
+        "state": null,
+        "metadata": {
+          "per_feature": {
+            "age": 0.5833333333333333,
+            "cholesterol": 0.5833333333333333,
+            "resting_bp": 0.5,
+            "target": 0.5833333333333333
+          },
+          "worst_feature": "resting_bp",
+          "worst_feature_score": 0.5
+        },
+        "created_at": "2026-09-30T03:53:06.299523+00:00"
+      }
+    ],
+    "repairs": [],
+    "agent_rejections": [],
+    "verdicts": {
+      "software_testing": "FAIL"
+    },
+    "human_approval": {
+      "status": "PENDING",
+      "approver": null,
+      "timestamp": null
+    },
+    "audit_signatures": [],
+    "issued_at": "2026-09-30T03:53:06.389853+00:00"
+  }
+}

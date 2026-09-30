@@ -47,12 +47,8 @@ def _encode_and_scale(
             cats, uniques = pd.factorize(r_tr.astype(str))
             mapping = {v: idx for idx, v in enumerate(uniques)}
             encoded_train[col] = cats
-            encoded_holdout[col] = r_ho.astype(str).map(
-                lambda x, m=mapping: m.get(x, -1)
-            )
-            encoded_synth[col] = s.astype(str).map(
-                lambda x, m=mapping: m.get(x, -1)
-            )
+            encoded_holdout[col] = r_ho.astype(str).map(lambda x, m=mapping: m.get(x, -1))
+            encoded_synth[col] = s.astype(str).map(lambda x, m=mapping: m.get(x, -1))
 
     scaler = MinMaxScaler()
     tr_mat = scaler.fit_transform(encoded_train)
