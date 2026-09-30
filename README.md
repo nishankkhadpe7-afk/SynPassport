@@ -65,44 +65,44 @@ The system enforces strict trust boundaries between the exploratory agent, the e
 ```mermaid
 flowchart TD
     subgraph Inputs["1. Mission & Data Ingestion"]
-        Data[User Training Dataset CSV] --> Split[Train / Holdout Split<br/>Holdout Isolated]
-        Mission[Mission Specification<br/>Purpose, Subgroups, Uses] --> Pol[Locked Policy Profile<br/>Canonical SHA-256 Locked]
+        Data["User Training Dataset CSV"] --> Split["Train / Holdout Split<br/>Holdout Isolated"]
+        Mission["Mission Specification<br/>Purpose, Subgroups, Uses"] --> Pol["Locked Policy Profile<br/>Canonical SHA-256 Locked"]
     end
 
     subgraph AgentLoop["2. Bounded Assurance Agent Loop"]
-        Split --> Loop[Agent Orchestrator: Plan -> Generate -> Diagnose -> Repair]
-        Pol --> Budget[Budget Guard:<br/>Max 3 Candidates, Max 2 Repairs]
+        Split --> Loop["Agent Orchestrator:<br/>Plan, Generate, Diagnose, Repair"]
+        Pol --> Budget["Budget Guard:<br/>Max 3 Candidates, Max 2 Repairs"]
         Budget --> Loop
-        Whitelist[Repair Whitelist Validator] -. Unauthorized Actions .-> Rejections[Agent Rejections Log]
+        Whitelist["Repair Whitelist Validator"] -. Unauthorized Actions .-> Rejections["Agent Rejections Log"]
         Rejections -. Logged Into .-> Passport
     end
 
     subgraph EvalEngine["3. Pre-Registered Check Engine"]
-        Loop --> Checks[8 Empirical Checks & Adversarial Attacks]
+        Loop --> Checks["8 Empirical Checks & Adversarial Attacks"]
         Split -. Isolated Holdout .-> Checks
-        Checks --> Store[(SQLite Evidence Store<br/>Value, 95% CI, Seed, Git SHA)]
+        Checks --> Store[("SQLite Evidence Store<br/>Value, 95% CI, Seed, Git SHA")]
     end
 
     subgraph Decision["4. Deterministic Policy Engine"]
-        Store --> Engine[Deterministic Policy Engine<br/>Pure Function: No LLM, No Network]
+        Store --> Engine["Deterministic Policy Engine<br/>Pure Function: No LLM, No Network"]
         Pol --> Engine
-        Engine --> Verdicts[Purpose-Scoped Verdicts<br/>PASS | WARNING | FAIL | INSUFFICIENT_EVIDENCE]
+        Engine --> Verdicts["Purpose-Scoped Verdicts<br/>PASS / WARNING / FAIL / INSUFFICIENT_EVIDENCE"]
     end
 
     subgraph PassportService["5. Cryptographic Evidence Passport"]
-        Verdicts --> Builder[Passport Builder: Canonical JSON]
-        Data -. SHA-256 .- Hash[Dataset Byte Digest]
+        Verdicts --> Builder["Passport Builder: Canonical JSON"]
+        Data -. SHA-256 .- Hash["Dataset Byte Digest"]
         Hash --> Builder
-        Builder --> Sign[Ed25519 Cryptographic Signature]
-        Sign --> Human[Human Release Approval & Re-Signature]
-        Human --> Passport[(Evidence Passport Manifest<br/>passport.json)]
+        Builder --> Sign["Ed25519 Cryptographic Signature"]
+        Sign --> Human["Human Release Approval & Re-Signature"]
+        Human --> Passport[("Evidence Passport Manifest<br/>passport.json")]
     end
 
     subgraph Consumers["6. Downstream Enforceability Layer"]
-        Passport -. Verification .- SDK["Python SDK Guard<br/>load_dataset()"]
-        Passport -. Verification .- CLI["CLI Tool<br/>passport verify"]
-        Passport -. Verification .- CI["CI/CD Gate<br/>GitHub Action"]
-        Passport -. Visualization .- Web["Next.js Dashboard<br/>Live SSE & Tamper Workbench"]
+        Passport -. Verification .- SDK["Python SDK Guard: load_dataset()"]
+        Passport -. Verification .- CLI["CLI Tool: passport verify"]
+        Passport -. Verification .- CI["CI/CD Gate: GitHub Action"]
+        Passport -. Visualization .- Web["Next.js Dashboard:<br/>Live SSE & Tamper Workbench"]
     end
 ```
 
