@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"surface-container-low":"#181c21","primary-container":"#06b6d4","surface-bright":"#36393f","background":"#101419","primary":"#4cd7f6","primary-fixed-dim":"#4cd7f6","secondary-fixed-dim":"#4edea3","surface-variant":"#31353b","secondary-container":"#00a572","on-secondary-fixed":"#002113","secondary-fixed":"#6ffbbe","on-primary-fixed-variant":"#004e5c","surface-container-lowest":"#0a0e13","outline-variant":"#3d494c","on-error":"#690005","surface-tint":"#4cd7f6","outline":"#869397","on-secondary":"#003824","on-tertiary-fixed":"#23005c","error":"#ffb4ab","on-secondary-container":"#00311f","tertiary-fixed-dim":"#d0bcff","surface-dim":"#101419","surface-container-highest":"#31353b","surface-container-high":"#262a30","on-tertiary-container":"#4900ae","error-container":"#93000a","inverse-surface":"#e0e2ea","surface-container":"#1c2025","tertiary":"#d0bcff","on-secondary-fixed-variant":"#005236","on-tertiary-fixed-variant":"#5516be","primary-fixed":"#acedff","on-background":"#e0e2ea","inverse-primary":"#00687a","on-tertiary":"#3c0091","on-primary-container":"#00424f","tertiary-container":"#b395ff","secondary":"#4edea3","inverse-on-surface":"#2d3136","on-primary-fixed":"#001f26","on-error-container":"#ffdad6","surface":"#101419","tertiary-fixed":"#e9ddff","on-surface":"#e0e2ea","on-surface-variant":"#bcc9cd","on-primary":"#003640"},borderRadius:{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},spacing:{"gutter-lg":"1.5rem","gutter-sm":"0.75rem","space-xs":"0.25rem","space-xl":"2rem","gutter":"1.25rem","space-sm":"0.5rem","margin-lg":"2.5rem","space-md":"0.75rem","space-lg":"1.25rem","margin-sm":"1rem","margin":"1.5rem"},fontFamily:{"headline-lg-mobile":["Inter"],"code-md":["JetBrains Mono"],"label-sm":["JetBrains Mono"],"headline-xl-mobile":["Inter"],"body-sm":["Inter"],"body-md":["Inter"],"headline-xl":["Inter"],"headline-lg":["Inter"],"code-lg":["JetBrains Mono"],"body-lg":["Inter"],"code-sm":["JetBrains Mono"],"headline-md":["Inter"],"label-md":["JetBrains Mono"]},fontSize:{"headline-lg-mobile":["20px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"600"}],"code-md":["12px",{"lineHeight":"18px","letterSpacing":"0em","fontWeight":"400"}],"label-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.08em","fontWeight":"600"}],"headline-xl-mobile":["28px",{"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"700"}],"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"headline-xl":["36px",{"lineHeight":"44px","letterSpacing":"-0.025em","fontWeight":"700"}],"headline-lg":["24px",{"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],"code-lg":["14px",{"lineHeight":"20px","letterSpacing":"-0.01em","fontWeight":"500"}],"body-lg":["16px",{"lineHeight":"24px","fontWeight":"400"}],"code-sm":["11px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"400"}],"headline-md":["18px",{"lineHeight":"26px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.05em","fontWeight":"600"}]}}}}</script></head><body class="bg-surface-container-lowest font-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest/95 backdrop-blur-md border-b border-outline-variant/30 z-50 px-gutter flex items-center justify-between"><div class="flex items-center gap-space-lg"><div class="flex items-center gap-space-sm"><div class="p-1 rounded bg-surface-container-high border border-outline-variant/40 flex items-center justify-center"><span class="material-symbols-outlined text-primary text-xl">shield_locked</span></div><div><div class="flex items-center gap-space-xs"><span class="font-headline-md text-headline-md tracking-tight text-on-surface font-bold">SynPassport</span><span class="font-label-sm text-label-sm uppercase bg-surface-container-high px-1.5 py-0.5 rounded text-primary border border-primary/20">Cockpit v2.4</span></div><p class="font-code-sm text-code-sm text-on-surface-variant">SYNTHETIC_DATA_ATTESTATION</p></div></div><div class="hidden xl:flex items-center gap-space-xs bg-surface-container px-space-sm py-1 rounded border border-outline-variant/30 font-code-sm text-code-sm text-on-surface-variant"><span class="material-symbols-outlined text-xs text-primary">lock</span><span class="text-on-surface">ml-sensitive-v1</span><span class="text-outline">·</span><span class="text-primary-fixed-dim">sha256:9f3a…c1d2</span></div><div class="hidden 2xl:flex items-center gap-space-xs bg-surface-container px-space-sm py-1 rounded border border-outline-variant/30 font-code-sm text-code-sm"><span class="text-outline">RUN:</span><span class="text-on-surface font-semibold">RUN-202505-8842F</span><span class="text-outline">·</span><span class="text-secondary-fixed-dim">HEART_DISEASE_V4</span></div></div><div class="flex items-center gap-space-md"><div class="hidden lg:flex items-center gap-space-xs px-space-sm py-1 rounded bg-surface-container-low border border-outline-variant/30 font-code-sm text-code-sm"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span class="text-on-surface-variant">Zero-LLM Deterministic</span></div><div class="flex items-center gap-space-xs bg-surface-container px-space-sm py-1 rounded border border-outline-variant/40"><span class="font-label-sm text-label-sm uppercase text-outline">Replay Mode</span><span class="font-code-sm text-code-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant border border-outline-variant/50">OFF</span></div><div class="h-6 w-px bg-outline-variant/30"></div><div class="flex items-center gap-space-xs"><div class="flex flex-col text-right hidden sm:block"><span class="font-label-sm text-label-sm text-on-surface">ED25519:ACTIVE</span><span class="font-code-sm text-code-sm text-on-surface-variant">VAULT-SEC-01</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover border border-outline-variant/60" src="https://lh3.googleusercontent.com/aida/AEtjO1UgYMD5CiPbm3uZtZIuVBC-DdTETLvQYgo2RACfM_G7qEjg2OKEqVxNjhRpXHvqmV4sYkF057gBPubqP8UmM9zkq3qWImOaw6KQ-R_aK4Q0AWa1A-BsLwyw5hTIB8GuWvglobzJoIQcumZ-UeoLG_vEuX_gmt4JEPn9vIvisSp6DvkYo32qFsizZs3Dg_JQSONq4h-xQTQahm24HKROHoi9u6obI8YcmjeHvzV5rPpT2E4EeJLnbHLKN-8Q"/></div></div></header><aside class="fixed left-0 top-16 bottom-8 w-72 bg-surface-container-lowest border-r border-outline-variant/30 z-40 flex flex-col justify-between overflow-y-auto"><div class="p-space-md"><div class="flex items-center justify-between pb-space-sm mb-space-sm border-b border-outline-variant/20"><span class="font-label-sm text-label-sm uppercase text-outline tracking-wider">Notarization Stepper</span><span class="font-code-sm text-code-sm text-primary">7 STAGES</span></div><nav class="space-y-1" data-active-classes="bg-surface-container border-l-2 border-primary text-on-surface font-semibold"><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="mission-setup" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full bg-secondary-container/20 border border-secondary flex items-center justify-center"><span class="material-symbols-outlined text-[10px] text-secondary">check</span></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">01. Mission Setup</span><span class="font-code-sm text-code-sm text-secondary">PASS</span></div><p class="font-code-sm text-code-sm text-outline">Topology & Schemas</p></div></a><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="run-view" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full bg-secondary-container/20 border border-secondary flex items-center justify-center"><span class="material-symbols-outlined text-[10px] text-secondary">check</span></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">02. Run View</span><span class="font-code-sm text-code-sm text-secondary">LIVE</span></div><p class="font-code-sm text-code-sm text-outline">Synthetic Ingestion</p></div></a><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="verdicts" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full border-2 border-primary flex items-center justify-center animate-pulse"><div class="w-1.5 h-1.5 rounded-full bg-primary"></div></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">03. Verdicts</span><span class="font-code-sm text-code-sm text-primary">FOCUS</span></div><p class="font-code-sm text-code-sm text-outline">Policy Bounds Audit</p></div></a><a aria-current="page" class="group flex items-start gap-space-sm p-space-sm rounded-r transition-colors bg-surface-container border-l-2 border-primary text-on-surface font-semibold" data-path="evidence" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full border border-primary/50 flex items-center justify-center"><div class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim"></div></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">04. Evidence</span><span class="font-code-sm text-code-sm text-primary-fixed-dim">ACTIVE</span></div><p class="font-code-sm text-code-sm text-outline">Merkle Tree Leafs</p></div></a><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="sufficiency" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full bg-surface-container-high border border-outline flex items-center justify-center"><span class="material-symbols-outlined text-[10px] text-error">warning</span></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">05. Sufficiency</span><span class="font-code-sm text-code-sm text-error">WARN</span></div><p class="font-code-sm text-code-sm text-outline">Sample Diversity Delta</p></div></a><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="passport" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full bg-surface-container-high border border-outline flex items-center justify-center"><span class="material-symbols-outlined text-[10px] text-outline">key</span></div><div class="w-px h-6 bg-outline-variant/40 my-0.5"></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">06. Passport</span><span class="font-code-sm text-code-sm text-outline">SEAL</span></div><p class="font-code-sm text-code-sm text-outline">Final Attestation Seal</p></div></a><a class="group flex items-start gap-space-sm p-space-sm rounded-r border-l-2 border-transparent text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="tamper-demo" href="#"><div class="flex flex-col items-center mt-0.5"><div class="w-4 h-4 rounded-full bg-surface-container-high border border-outline flex items-center justify-center"><span class="material-symbols-outlined text-[10px] text-outline">terminal</span></div></div><div class="flex-1"><div class="flex items-center justify-between"><span class="font-label-md text-label-md">07. Tamper Demo</span><span class="font-code-sm text-code-sm text-outline">SIM</span></div><p class="font-code-sm text-code-sm text-outline">Adversarial Injector</p></div></a></nav></div><div class="p-space-sm m-space-sm bg-surface-container-low rounded border border-outline-variant/30 font-code-sm text-code-sm"><div class="flex items-center justify-between text-outline mb-1"><span class="font-label-sm text-label-sm uppercase">CRYPTO ENGINE</span><span class="text-secondary">READY</span></div><div class="text-on-surface-variant truncate font-code-sm">ALG: ED25519-SHA512</div><div class="text-on-surface-variant truncate font-code-sm">KEY: 0x8842...32FA</div></div></aside><div class="pl-72 pb-8"><main class="w-full pt-16 min-h-[calc(100vh-2rem)] bg-surface-container-lowest px-gutter py-space-lg text-on-surface"><div class="flex flex-col w-full space-y-gutter">
+<!-- Top Control Deck -->
+<div class="flex flex-col xl:flex-row xl:items-center justify-between gap-space-md p-space-md rounded-xl bg-surface-container-low shadow-sm">
+<div class="flex flex-wrap items-center gap-space-sm">
+<div class="flex items-center p-1 rounded-lg bg-surface-container-lowest gap-1">
+<button class="filter-btn active-tab px-space-sm py-1 rounded text-primary-container font-label-md text-label-md flex items-center gap-1 transition-all" id="btn-all" onclick="filterChecks('all')">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+<span>All Checks</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-code-sm text-code-sm text-on-surface">8</span>
+</button>
+<button class="filter-btn px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 transition-all" id="btn-pass" onclick="filterChecks('pass')">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span>Pass</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-code-sm text-code-sm text-on-surface">5</span>
+</button>
+<button class="filter-btn px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 transition-all" id="btn-warning" onclick="filterChecks('warning')">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
+<span>Warning</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-code-sm text-code-sm text-on-surface">1</span>
+</button>
+<button class="filter-btn px-space-sm py-1 rounded text-on-surface-variant hover:text-on-surface font-label-md text-label-md flex items-center gap-1 transition-all" id="btn-fail" onclick="filterChecks('fail')">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span>Fail / Insufficient</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container font-code-sm text-code-sm text-on-surface">2</span>
+</button>
+</div>
+<!-- Provenance Note Chip -->
+<div class="flex items-center gap-2 px-space-md py-1.5 rounded-lg bg-surface-container text-on-surface-variant font-code-sm text-code-sm">
+<span class="material-symbols-outlined text-xs text-primary">lock</span>
+<span class="text-on-surface font-medium">Evidence append-only</span>
+<span class="text-outline-variant">·</span>
+<span>Seed: <strong class="text-primary-fixed-dim font-mono">42891</strong></span>
+<span class="text-outline-variant">·</span>
+<span>Commit: <strong class="text-on-surface font-mono">a8f41c9</strong></span>
+<span class="text-outline-variant">·</span>
+<span>Policy SHA: <strong class="text-secondary-fixed-dim font-mono">9f3a8b72</strong></span>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-space-sm self-end xl:self-auto">
+<button class="flex items-center gap-2 px-space-md py-2 rounded-lg bg-primary-container hover:bg-primary text-on-primary-container font-label-md text-label-md shadow transition-colors" onclick="exportEvidenceLedger()">
+<span class="material-symbols-outlined text-sm">download</span>
+<span>Export Evidence Ledger (.json)</span>
+</button>
+</div>
+</div>
+<!-- Forensic Data Table Container -->
+<div class="rounded-xl bg-surface-container-low shadow-md overflow-hidden">
+<div class="p-space-md bg-surface-container flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="p-1 rounded bg-surface-container-high text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-base">rule</span>
+</span>
+<div>
+<h2 class="font-headline-md text-headline-md tracking-tight text-on-surface">Forensic Attestation Register</h2>
+<p class="font-code-sm text-code-sm text-outline">ED25519 verified cryptographic proof leaves with strictly bound policy bounds</p>
+</div>
+</div>
+<div class="flex items-center gap-space-md text-outline font-code-sm text-code-sm">
+<div class="flex items-center gap-1.5">
+<span class="w-2.5 h-0.5 bg-primary rounded"></span>
+<span>95% CI Interval</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-on-surface"></span>
+<span>Point Estimate</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-0.5 h-3 bg-error rounded"></span>
+<span>Policy Threshold</span>
+</div>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead class="bg-surface-container-lowest text-outline font-label-sm text-label-sm uppercase tracking-wider">
+<tr>
+<th class="py-space-md px-space-lg">Check Name</th>
+<th class="py-space-md px-space-md">Measured Value</th>
+<th class="py-space-md px-space-md min-w-[240px]">95% CI & Policy Threshold</th>
+<th class="py-space-md px-space-md">Assurance State</th>
+<th class="py-space-md px-space-sm">Seed</th>
+<th class="py-space-md px-space-sm">Git SHA</th>
+<th class="py-space-md px-space-md text-right">Details</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-on-surface">
+<!-- Row 1: Schema Validity -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container-low" data-verdict="pass">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm">verified_user</span>
+<span class="font-semibold text-on-surface">Schema Validity</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-on-surface font-semibold">100.0%</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[85%] w-[14%] h-1.5 bg-primary/40 rounded"></div>
+<div class="absolute left-[98%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface-container-highest"></div>
+<div class="absolute left-[95%] top-0 bottom-0 w-0.5 bg-outline" title="Policy Floor 95.0%"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">>=99%</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>PASS
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-1')">
+<span class="material-symbols-outlined text-sm" id="icon-row-1">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 1 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-1">
+<td class="p-space-md px-space-lg" colspan="7">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md font-code-sm text-code-sm">
+<div class="p-space-sm rounded bg-surface-container text-on-surface-variant">
+<span class="text-outline uppercase text-[10px] block">Field Coverage</span>
+<span class="text-on-surface font-semibold">48/48 Attributes Typed</span>
+</div>
+<div class="p-space-sm rounded bg-surface-container text-on-surface-variant">
+<span class="text-outline uppercase text-[10px] block">Null Rate Violation</span>
+<span class="text-secondary font-semibold">0.000% (Permitted <0.01%)</span>
+</div>
+<div class="p-space-sm rounded bg-surface-container text-on-surface-variant">
+<span class="text-outline uppercase text-[10px] block">Regex Conformance</span>
+<span class="text-on-surface font-semibold">100% Strict RFC-4122</span>
+</div>
+</div>
+</td>
+</tr>
+<!-- Row 2: Marginal Fidelity -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container" data-verdict="pass">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">analytics</span>
+<span class="font-semibold text-on-surface">Marginal Fidelity</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-on-surface">0.912 <span class="text-outline text-[10px]">Wasserstein</span></td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[78%] w-[16%] h-1.5 bg-primary/40 rounded"></div>
+<div class="absolute left-[86%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface-container-highest"></div>
+<div class="absolute left-[80%] top-0 bottom-0 w-0.5 bg-outline" title="Threshold 0.90"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">| 0.90</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>PASS
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-2')">
+<span class="material-symbols-outlined text-sm" id="icon-row-2">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 2 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-2">
+<td class="p-space-md px-space-lg" colspan="7">
+<p class="font-code-sm text-code-sm text-outline">Wasserstein metric normalized [0,1]. Distribution tests run on 12 continuous vectors across real holdout vs synthetic batches.</p>
+</td>
+</tr>
+<!-- Row 3: Correlation Fidelity -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container-low" data-verdict="pass">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">hub</span>
+<span class="font-semibold text-on-surface">Correlation Fidelity</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-on-surface">0.874 <span class="text-outline text-[10px]">Cramér's V</span></td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[70%] w-[18%] h-1.5 bg-primary/40 rounded"></div>
+<div class="absolute left-[80%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface-container-highest"></div>
+<div class="absolute left-[74%] top-0 bottom-0 w-0.5 bg-outline" title="Threshold 0.85"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">| 0.85</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>PASS
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-3')">
+<span class="material-symbols-outlined text-sm" id="icon-row-3">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 3 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-3">
+<td class="p-space-md px-space-lg" colspan="7">
+<p class="font-code-sm text-code-sm text-outline">Matrix L1 error norm = 0.042. Spearman rank correlation deviation strictly within tolerance band (+/- 0.08).</p>
+</td>
+</tr>
+<!-- Row 4: Downstream Utility TSTR -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container" data-verdict="warning">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary-container text-sm">troubleshoot</span>
+<span class="font-semibold text-on-surface">Downstream Utility TSTR</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-tertiary-fixed-dim font-semibold">AUC Δ 0.054</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[45%] top-0 bottom-0 w-0.5 bg-outline" title="Threshold 0.050"></div>
+<div class="absolute left-[46%] w-[20%] h-1.5 bg-tertiary-container/40 rounded"></div>
+<div class="absolute left-[56%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-tertiary border-2 border-surface-container-highest"></div>
+</div>
+<span class="font-code-sm text-code-sm text-tertiary-container font-medium">0.050 |</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>WARNING
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-4')">
+<span class="material-symbols-outlined text-sm" id="icon-row-4">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 4 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-4">
+<td class="p-space-md px-space-lg" colspan="7">
+<div class="text-on-surface-variant font-code-sm text-code-sm p-space-sm rounded bg-surface-container">
+<span class="text-tertiary font-semibold">TSTR Delta Alert:</span> Synthetic train/real test baseline delta observed 0.054 vs maximum allowable target 0.050. Gradient boosted tree AUC dropped from 0.882 (TRTR) to 0.828 (TSTR).
+              </div>
+</td>
+</tr>
+<!-- Row 5: Subgroup Utility -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container-low" data-verdict="fail">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-error text-sm">group_remove</span>
+<span class="font-semibold text-on-surface">Subgroup Utility (age>=65)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-error font-semibold">AUC 0.690</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[30%] w-[32%] h-1.5 bg-error/30 rounded"></div>
+<div class="absolute left-[45%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-error border-2 border-surface-container-highest"></div>
+<div class="absolute left-[70%] top-0 bottom-0 w-0.5 bg-error" title="Required Target 0.780"></div>
+</div>
+<span class="font-code-sm text-code-sm text-error">0.780</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-error-container/20 text-error font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>FAIL
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-5')">
+<span class="material-symbols-outlined text-sm" id="icon-row-5">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 5 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-5">
+<td class="p-space-md px-space-lg" colspan="7">
+<div class="p-space-sm bg-error-container/20 rounded font-code-sm text-code-sm text-error">
+<strong>Policy Violation:</strong> Senior cohort discriminatory disparity detected. Synthetic representation fails min AUC threshold of 0.780 by -0.090 margin. Attestation seal holds non-negotiable rejection flag until resampled.
+              </div>
+</td>
+</tr>
+<!-- Row 6: Distance to Closest Record (DCR) -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container" data-verdict="pass">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm">space_dashboard</span>
+<span class="font-semibold text-on-surface">Distance to Closest Record (DCR)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-on-surface">0.138 <span class="text-outline text-[10px]">min 5th%</span></td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[35%] top-0 bottom-0 w-0.5 bg-outline" title="Policy Floor 0.120"></div>
+<div class="absolute left-[45%] w-[18%] h-1.5 bg-secondary/40 rounded"></div>
+<div class="absolute left-[54%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-secondary border-2 border-surface-container-highest"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">0.120 |</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>PASS
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-6')">
+<span class="material-symbols-outlined text-sm" id="icon-row-6">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 6 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-6">
+<td class="p-space-md px-space-lg" colspan="7">
+<p class="font-code-sm text-code-sm text-outline">Evaluated via Exact Euclidean L2 over standard-scaled features. See distribution curve below for detailed risk analysis.</p>
+</td>
+</tr>
+<!-- Row 7: Membership Inference Attack (MIA) -->
+<tr class="check-row hover:bg-surface-container/60 transition-colors bg-surface-container-low" data-verdict="pass">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-sm">shield</span>
+<span class="font-semibold text-on-surface">Membership Inference Attack (MIA)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-on-surface">AUC 0.512</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<div class="absolute left-[44%] w-[16%] h-1.5 bg-primary/40 rounded"></div>
+<div class="absolute left-[52%] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary border-2 border-surface-container-highest"></div>
+<div class="absolute left-[62%] top-0 bottom-0 w-0.5 bg-outline" title="Max Bound 0.530"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">| 0.530</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-secondary-container/20 text-secondary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>PASS
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded hover:bg-surface-container text-outline hover:text-on-surface transition-colors" onclick="toggleRow('row-7')">
+<span class="material-symbols-outlined text-sm" id="icon-row-7">expand_more</span>
+</button>
+</td>
+</tr>
+<!-- Hidden details 7 -->
+<tr class="hidden bg-surface-container-lowest/80" id="row-7">
+<td class="p-space-md px-space-lg" colspan="7">
+<p class="font-code-sm text-code-sm text-outline">Empirical Shadow Model Attack: Model demonstrates near random-guess vulnerability (Ideal: 0.500, Ceiling: 0.530).</p>
+</td>
+</tr>
+<!-- Row 8: Subgroup Sample Size (VISUALLY EXPANDED BY DEFAULT) -->
+<tr class="check-row bg-surface-container-high transition-colors" data-verdict="fail">
+<td class="py-space-md px-space-lg">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-sm">query_stats</span>
+<span class="font-semibold text-on-surface">Subgroup Sample Size (age>=65)</span>
+</div>
+</td>
+<td class="py-space-md px-space-md font-code-sm text-code-sm text-tertiary-fixed-dim font-bold">N = 35</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-2">
+<div class="relative w-44 h-4 bg-surface-container-highest rounded flex items-center">
+<!-- Wide dashed CI -->
+<div class="absolute left-[10%] w-[55%] h-1.5 border-b-2 border-dashed border-tertiary/70"></div>
+<div class="absolute left-[20%] -translate-x-1/2 w-3 h-3 rounded-full bg-tertiary border-2 border-surface-container-highest"></div>
+<div class="absolute left-[80%] top-0 bottom-0 w-0.5 bg-outline-variant" title="Target N=171"></div>
+</div>
+<span class="font-code-sm text-code-sm text-outline">171 target</span>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-tertiary/20 text-tertiary font-label-sm text-label-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>INSUFFICIENT
+              </span>
+</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-outline">42891</td>
+<td class="py-space-md px-space-sm font-code-sm text-code-sm text-primary-fixed-dim">a8f41c9</td>
+<td class="py-space-md px-space-md text-right">
+<button class="p-1 rounded bg-surface-container-highest text-primary transition-colors" onclick="toggleRow('row-8')">
+<span class="material-symbols-outlined text-sm" id="icon-row-8">expand_less</span>
+</button>
+</td>
+</tr>
+<!-- Row 8 Expanded Deep Forensic Sub-table View -->
+<tr class="bg-surface-container-lowest" id="row-8">
+<td class="p-space-lg" colspan="7">
+<div class="flex flex-col space-y-space-md rounded-xl bg-surface-container p-space-md shadow-inner">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-space-sm gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-error text-base">warning</span>
+<span class="font-headline-md text-body-md font-bold text-on-surface">Statistical Power & Representation Deficit</span>
+</div>
+<span class="font-code-sm text-code-sm px-2 py-0.5 rounded bg-error-container/30 text-error">CRITICAL ATTRIBUTION BREACH</span>
+</div>
+<!-- Sub-table metrics -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-space-sm">
+<div class="p-space-sm rounded-lg bg-surface-container-high">
+<div class="font-label-sm text-label-sm uppercase text-outline">Target N</div>
+<div class="font-code-lg text-code-lg text-on-surface font-semibold mt-1">171</div>
+<div class="font-code-sm text-code-sm text-outline">Cohort 18.2% quota</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-high">
+<div class="font-label-sm text-label-sm uppercase text-outline">Observed N</div>
+<div class="font-code-lg text-code-lg text-error font-bold mt-1">35</div>
+<div class="font-code-sm text-code-sm text-error">-79.5% Deficit</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-high">
+<div class="font-label-sm text-label-sm uppercase text-outline">P-Value</div>
+<div class="font-code-lg text-code-lg text-tertiary-fixed-dim font-semibold mt-1">0.0014</div>
+<div class="font-code-sm text-code-sm text-outline">Reject null rep</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-high">
+<div class="font-label-sm text-label-sm uppercase text-outline">Stat Power</div>
+<div class="font-code-lg text-code-lg text-error font-semibold mt-1">0.41</div>
+<div class="font-code-sm text-code-sm text-outline">Underpowered</div>
+</div>
+<div class="p-space-sm rounded-lg bg-surface-container-high">
+<div class="font-label-sm text-label-sm uppercase text-outline">Target Power</div>
+<div class="font-code-lg text-code-lg text-secondary-fixed-dim font-semibold mt-1">0.90</div>
+<div class="font-code-sm text-code-sm text-secondary">Policy Mandate</div>
+</div>
+</div>
+<div class="flex flex-col lg:flex-row items-start lg:items-center justify-between p-space-sm rounded bg-surface-container-low font-code-sm text-code-sm gap-2">
+<span class="text-on-surface-variant">Merkle Tree Leaf: <code class="text-primary font-mono font-medium">0x88f001c901e9...c7a2</code></span>
+<div class="flex items-center gap-space-sm">
+<span class="text-outline">Remediation: Conditional Upsampling required</span>
+<button class="px-space-sm py-1 rounded bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md">View Policy Rule #81</button>
+</div>
+</div>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Lower Section: DCR Privacy Comparison & Risk Zone Analysis -->
+<div class="rounded-xl bg-surface-container-low p-space-lg shadow-md flex flex-col space-y-space-md">
+<!-- Header banner -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-sm">
+<div class="space-y-1">
+<div class="flex items-center gap-space-sm">
+<span class="p-1 rounded bg-surface-container-high text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-base">stacked_bar_chart</span>
+</span>
+<h3 class="font-headline-md text-headline-md tracking-tight text-on-surface font-bold">DCR Privacy Comparison & Risk Zone Analysis</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Overlaid distance-to-closest-record distributions detecting synthetic replication leakage against real holdout references.</p>
+</div>
+<div class="flex flex-wrap items-center gap-space-md font-code-sm text-code-sm">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-sm bg-outline/40"></span>
+<span class="text-on-surface-variant">Holdout Baseline Distance</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-sm bg-primary"></span>
+<span class="text-primary-fixed-dim font-medium">Synthetic Dataset Distance</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-sm bg-error-container/60"></span>
+<span class="text-error font-medium">Memorization Hazard</span>
+</div>
+</div>
+</div>
+<!-- Distribution Chart Area -->
+<div class="relative w-full h-72 rounded-lg bg-surface-container-lowest p-space-md flex flex-col justify-end overflow-hidden">
+<!-- Background SVG Chart -->
+<svg class="absolute inset-0 w-full h-full px-6 pt-6 pb-10" fill="none" preserveaspectratio="none" viewbox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<lineargradient id="hazardGrad" x1="0" x2="1" y1="0" y2="0">
+<stop offset="0%" stop-color="#93000a" stop-opacity="0.35"></stop>
+<stop offset="100%" stop-color="#ffb4ab" stop-opacity="0.08"></stop>
+</lineargradient>
+<lineargradient id="synthGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#4cd7f6" stop-opacity="0.4"></stop>
+<stop offset="100%" stop-color="#4cd7f6" stop-opacity="0.0"></stop>
+</lineargradient>
+<lineargradient id="holdoutGrad" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#869397" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#869397" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<!-- Red Risk Zone Shading (0 to 300 x units representing Distance < 0.120) -->
+<rect fill="url(#hazardGrad)" height="260" width="300" x="0" y="0"></rect>
+<!-- Grid Lines -->
+<line stroke="#31353b" stroke-dasharray="3 3" x1="0" x2="1000" y1="65" y2="65"></line>
+<line stroke="#31353b" stroke-dasharray="3 3" x1="0" x2="1000" y1="130" y2="130"></line>
+<line stroke="#31353b" stroke-dasharray="3 3" x1="0" x2="1000" y1="195" y2="195"></line>
+<line stroke="#3d494c" stroke-width="1.5" x1="0" x2="1000" y1="260" y2="260"></line>
+<!-- Holdout Baseline Distribution Curve (Slate) -->
+<path d="M 50 260 Q 150 250, 240 200 T 400 90 T 560 50 T 720 120 T 900 240 L 980 260 L 980 260 L 50 260 Z" fill="url(#holdoutGrad)"></path>
+<path d="M 50 260 Q 150 250, 240 200 T 400 90 T 560 50 T 720 120 T 900 240 L 980 260" stroke="#869397" stroke-linecap="round" stroke-width="2"></path>
+<!-- Synthetic Dataset Distribution Curve (Electric Teal) -->
+<path d="M 120 260 Q 220 255, 310 220 T 450 60 T 600 40 T 760 140 T 940 260 L 120 260 Z" fill="url(#synthGrad)"></path>
+<path d="M 120 260 Q 220 255, 310 220 T 450 60 T 600 40 T 760 140 T 940 260" stroke="#4cd7f6" stroke-linecap="round" stroke-width="2.5"></path>
+<!-- Threshold Line 0.120 (at x=300) -->
+<line stroke="#ffb4ab" stroke-dasharray="5 4" stroke-width="2" x1="300" x2="300" y1="10" y2="260"></line>
+<!-- 5th Percentile Marker for Synthetic (at x=345, representing 0.138) -->
+<line stroke="#4edea3" stroke-width="2" x1="345" x2="345" y1="30" y2="260"></line>
+<circle cx="345" cy="180" fill="#4edea3" r="4.5" stroke="#0a0e13" stroke-width="2"></circle>
+</svg>
+<!-- Overlay Badges and Markers in Chart Space -->
+<div class="absolute top-4 left-6 flex flex-col space-y-1">
+<span class="px-2 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-label-sm w-fit">
+          MEMORIZATION HAZARD ZONE
+        </span>
+<span class="font-code-sm text-code-sm text-outline">DCR < 0.120 (Identifiable Overfit)</span>
+</div>
+<!-- Policy Minimum Threshold Callout -->
+<div class="absolute top-4 left-[28%] md:left-[305px] transform -translate-x-1/2 flex flex-col items-center">
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-error font-label-sm text-label-sm whitespace-nowrap shadow">
+          Policy Threshold: 0.120
+        </span>
+</div>
+<!-- 5th Percentile Clear Pin -->
+<div class="absolute top-12 left-[36%] md:left-[355px] flex flex-col items-start space-y-0.5">
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm whitespace-nowrap shadow flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">verified</span>
+<span>Synth 5th %ile: 0.138</span>
+</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-secondary font-code-sm text-code-sm font-bold whitespace-nowrap">
+          Margin: +0.018 Clear
+        </span>
+</div>
+<!-- X-Axis Labels -->
+<div class="relative z-10 w-full flex justify-between pt-2 px-6 font-code-sm text-code-sm text-outline">
+<span>0.000</span>
+<span>0.050</span>
+<span class="text-error font-semibold">0.120 (Cutoff)</span>
+<span class="text-secondary font-semibold">0.138 (5th%)</span>
+<span>0.200</span>
+<span>0.300</span>
+<span>0.400+</span>
+</div>
+</div>
+<!-- Explanatory Callout Box -->
+<div class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container border-l-4 border-primary">
+<span class="material-symbols-outlined text-primary text-xl mt-0.5">verified</span>
+<div class="flex flex-col space-y-1">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider">Privacy Defense Audit Statement</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container-high text-primary font-code-sm text-code-sm">DP-EPSILON = 0.45</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+          DCR distribution verifies <strong class="text-on-surface">zero direct record replication</strong>. Holdout nearest-neighbor queries confirm privacy preservation under differential privacy <span class="font-mono text-primary font-medium">ε = 0.45</span>, with synthetic distances comfortably exceeding the strict <span class="font-mono text-on-surface">0.120</span> memorization hazard baseline.
+        </p>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function toggleRow(rowId) {
+    const row = document.getElementById(rowId);
+    const icon = document.getElementById('icon-' + rowId);
+    if (!row) return;
+
+    if (row.classList.contains('hidden')) {
+      row.classList.remove('hidden');
+      if (icon) icon.textContent = 'expand_less';
+    } else {
+      row.classList.add('hidden');
+      if (icon) icon.textContent = 'expand_more';
+    }
+  }
+
+  function filterChecks(type) {
+    const rows = document.querySelectorAll('.check-row');
+    const buttons = document.querySelectorAll('.filter-btn');
+
+    buttons.forEach(btn => {
+      btn.classList.remove('text-primary-container');
+      btn.classList.add('text-on-surface-variant');
+    });
+
+    const activeBtn = document.getElementById('btn-' + type);
+    if (activeBtn) {
+      activeBtn.classList.add('text-primary-container');
+      activeBtn.classList.remove('text-on-surface-variant');
+    }
+
+    rows.forEach(row => {
+      const verdict = row.getAttribute('data-verdict');
+      const detailsRow = document.getElementById(row.nextElementSibling?.id);
+
+      if (type === 'all') {
+        row.style.display = '';
+      } else if (type === 'pass') {
+        row.style.display = (verdict === 'pass') ? '' : 'none';
+        if (detailsRow && verdict !== 'pass') detailsRow.classList.add('hidden');
+      } else if (type === 'warning') {
+        row.style.display = (verdict === 'warning') ? '' : 'none';
+        if (detailsRow && verdict !== 'warning') detailsRow.classList.add('hidden');
+      } else if (type === 'fail') {
+        row.style.display = (verdict === 'fail') ? '' : 'none';
+        if (detailsRow && verdict !== 'fail') detailsRow.classList.add('hidden');
+      }
+    });
+  }
+
+  function exportEvidenceLedger() {
+    const payload = {
+      timestamp: new Date().toISOString(),
+      run_id: "RUN-202505-8842F",
+      merkle_root: "sha256:9f3a8b72e0192a83c1d2e5f6a9b4c7d8",
+      seed: 42891,
+      commit: "a8f41c9",
+      checks: [
+        { name: "Schema Validity", state: "PASS", measured: 1.0 },
+        { name: "Marginal Fidelity", state: "PASS", measured: 0.912, threshold: 0.90 },
+        { name: "Correlation Fidelity", state: "PASS", measured: 0.874, threshold: 0.85 },
+        { name: "Downstream Utility TSTR", state: "WARNING", measured: 0.054, threshold: 0.050 },
+        { name: "Subgroup Utility (age>=65)", state: "FAIL", measured: 0.690, threshold: 0.780 },
+        { name: "Distance to Closest Record (DCR)", state: "PASS", measured: 0.138, threshold: 0.120 },
+        { name: "Membership Inference Attack (MIA)", state: "PASS", measured: 0.512, threshold: 0.530 },
+        { name: "Subgroup Sample Size (age>=65)", state: "INSUFFICIENT_EVIDENCE", observed_n: 35, target_n: 171, power: 0.41 }
+      ]
+    };
+    
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "evidence-ledger-RUN-202505-8842F.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+</script></main></div><footer class="fixed bottom-0 left-0 right-0 h-8 bg-surface-container-lowest border-t border-outline-variant/30 z-50 px-gutter flex items-center justify-between text-outline font-label-sm text-label-sm"><div class="flex items-center gap-space-sm"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span><span class="tracking-wider uppercase text-on-surface-variant">ED25519 VERIFIED</span><span class="text-outline-variant">·</span><span class="tracking-wider uppercase text-on-surface-variant">APPEND-ONLY AUDIT LEDGER</span></div><div class="hidden md:block tracking-widest uppercase text-on-surface-variant/80 font-code-sm">AGENT PROPOSES. · POLICY DECIDES. · HUMAN APPROVES. · SIGNATURE BINDS.</div><div class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-xs text-primary">verified</span><span class="text-on-surface font-code-sm">BLOCK_SEQ #194,802</span></div></footer></body></html>

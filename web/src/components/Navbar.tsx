@@ -1,16 +1,7 @@
 "use client";
 
 import React from "react";
-import {
-  Shield,
-  Activity,
-  Layers,
-  BarChart3,
-  Users,
-  FileCheck2,
-  AlertOctagon,
-  Sparkles,
-} from "lucide-react";
+import { SynPassportLogo } from "./SynPassportLogo";
 
 export type DashboardTab =
   | "setup"
@@ -25,131 +16,140 @@ interface NavbarProps {
   activeTab: DashboardTab;
   setActiveTab: (tab: DashboardTab) => void;
   isReplay: boolean;
+  setIsReplay?: (val: boolean) => void;
   apiConnected: boolean;
   runId: string | null;
   runStatus: string | null;
+  onToggleMobileMenu?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
-  activeTab,
-  setActiveTab,
   isReplay,
+  setIsReplay,
   apiConnected,
   runId,
   runStatus,
+  onToggleMobileMenu,
 }) => {
-  const navItems: Array<{ id: DashboardTab; label: string; icon: React.ReactNode; requiresRun?: boolean }> = [
-    { id: "setup", label: "1. Setup", icon: <Layers className="w-3.5 h-3.5" /> },
-    { id: "timeline", label: "2. Agent Timeline", icon: <Activity className="w-3.5 h-3.5" />, requiresRun: true },
-    { id: "verdicts", label: "3. Verdict Board", icon: <FileCheck2 className="w-3.5 h-3.5" />, requiresRun: true },
-    { id: "evidence", label: "4. Evidence Drill-Down", icon: <BarChart3 className="w-3.5 h-3.5" />, requiresRun: true },
-    { id: "sufficiency", label: "5. Sufficiency", icon: <Users className="w-3.5 h-3.5" />, requiresRun: true },
-    { id: "passport", label: "6. Evidence Passport", icon: <Shield className="w-3.5 h-3.5" />, requiresRun: true },
-    { id: "tamper", label: "7. Tamper Demo", icon: <AlertOctagon className="w-3.5 h-3.5" /> },
-  ];
-
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 shadow-md shadow-indigo-500/20 text-white">
-              <Shield className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-bold tracking-tight text-white">SynPassport</span>
-                <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700/60">
-                  v0.1.0
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
-                Purpose-Bound Assurance &amp; Evidence Passports
-              </p>
-            </div>
-          </div>
-
-          {/* Right Status Indicators */}
-          <div className="flex items-center gap-3">
-            {/* Replay Mode Indicator */}
-            {isReplay && (
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium animate-pulse"
-                title="Backend is operating in deterministic replay mode with cached runs"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Replay Mode Active</span>
-              </div>
-            )}
-
-            {/* Run ID Pill */}
-            {runId && (
-              <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
-                <span className="text-slate-500">RUN:</span>
-                <span className="text-indigo-400 font-semibold">{runId.slice(0, 14)}</span>
-                {runStatus && (
-                  <span
-                    className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-bold ${
-                      runStatus === "COMPLETED"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : runStatus === "RUNNING"
-                        ? "bg-indigo-500/20 text-indigo-400"
-                        : runStatus === "FAILED"
-                        ? "bg-rose-500/20 text-rose-400"
-                        : "bg-slate-800 text-slate-400"
-                    }`}
-                  >
-                    {runStatus}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* API Connection Indicator */}
-            <div
-              className={`flex items-center gap-1.5 text-xs font-mono px-2 py-1 rounded-md border ${
-                apiConnected
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : "bg-rose-500/10 border-rose-500/20 text-rose-400"
-              }`}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  apiConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-500"
-                }`}
-              />
-              <span className="hidden sm:inline">
-                {apiConnected ? "API Connected" : "API Offline"}
+    <header className="fixed top-0 left-0 right-0 h-16 bg-[#0a0c0f] border-b border-[#232a33] z-50 px-4 sm:px-6 flex items-center justify-between">
+      {/* Left: Brand & Badges */}
+      <div className="flex items-center gap-3 sm:gap-4">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="lg:hidden p-1.5 rounded hover:bg-[#17202b] text-[#8b95a3] hover:text-[#e6eaf0] transition-colors"
+            aria-label="Toggle Navigation Menu"
+          >
+            <span className="material-symbols-outlined text-xl">menu</span>
+          </button>
+        )}
+        <div className="flex items-center gap-3">
+          <SynPassportLogo size={36} />
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold tracking-tight text-[#e6eaf0]">
+                SynPassport
+              </span>
+              <span className="text-[10px] uppercase font-mono bg-[#17202b] px-1.5 py-0.5 rounded text-[#2dd4bf] border border-[#2dd4bf]/25 font-semibold">
+                Cockpit v2.4
               </span>
             </div>
+            <p className="text-[10px] font-mono text-[#8b95a3] tracking-wide uppercase hidden sm:block">
+              SYNTHETIC_DATA_ATTESTATION
+            </p>
           </div>
         </div>
 
-        {/* Navigation Tabs Bar */}
-        <div className="flex overflow-x-auto space-x-1 py-2 scrollbar-none border-t border-slate-900">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id;
-            const disabled = item.requiresRun && !runId;
+        {/* Policy Digest Pill */}
+        <div className="hidden xl:flex items-center gap-2 bg-[#17202b] px-2.5 py-1 rounded border border-[#232a33] text-xs font-mono text-[#8b95a3]">
+          <span className="material-symbols-outlined text-xs text-[#2dd4bf]">lock</span>
+          <span className="text-[#e6eaf0] font-medium">ml-sensitive-v1</span>
+          <span className="text-[#859490]">·</span>
+          <span className="text-[#2dd4bf]">sha256:9f3a…c1d2</span>
+        </div>
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => !disabled && setActiveTab(item.id)}
-                disabled={disabled}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                  isActive
-                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
-                    : disabled
-                    ? "text-slate-600 cursor-not-allowed opacity-50"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/80"
-                }`}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+        {/* Run ID Pill */}
+        <div className="hidden 2xl:flex items-center gap-2 bg-[#17202b] px-2.5 py-1 rounded border border-[#232a33] text-xs font-mono">
+          <span className="text-[#859490]">RUN:</span>
+          <span className="text-[#e6eaf0] font-semibold truncate max-w-[130px]">
+            {runId ? runId.slice(0, 16) : "RUN-202505-8842F"}
+          </span>
+          <span className="text-[#859490]">·</span>
+          <span className="text-[#34d399] uppercase font-medium">
+            {runStatus || "HEART_DISEASE_V4"}
+          </span>
+        </div>
+      </div>
+
+      {/* Right: Telemetry & Controls */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Zero-LLM Deterministic pill */}
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded bg-[#11151a] border border-[#232a33] text-xs font-mono">
+          <span className="w-2 h-2 rounded-full bg-[#34d399] animate-pulse" />
+          <span className="text-[#8b95a3]">Zero-LLM Deterministic</span>
+        </div>
+
+        {/* Replay Mode Toggle */}
+        <button
+          type="button"
+          onClick={() => setIsReplay && setIsReplay(!isReplay)}
+          className="flex items-center gap-1.5 bg-[#17202b] hover:bg-[#212b36] px-2 sm:px-2.5 py-1 rounded border border-[#232a33] text-xs font-mono transition-colors"
+          title="Toggle deterministic replay mode with cached runs"
+        >
+          <span className="text-[10px] uppercase text-[#859490] hidden sm:inline">
+            Replay Mode
+          </span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+              isReplay
+                ? "bg-[#34d399]/15 text-[#34d399] border-[#34d399]/40"
+                : "bg-[#212b36] text-[#8b95a3] border-[#232a33]"
+            }`}
+          >
+            {isReplay ? "ACTIVE" : "OFF"}
+          </span>
+        </button>
+
+        <div className="h-5 w-px bg-[#232a33] hidden sm:block" />
+
+        {/* API Status Pill */}
+        <div
+          className={`flex items-center gap-1.5 text-xs font-mono px-2 py-1 rounded border ${
+            apiConnected
+              ? "bg-[#34d399]/10 text-[#34d399] border-[#34d399]/30"
+              : "bg-[#f87171]/10 text-[#f87171] border-[#f87171]/30"
+          }`}
+          title={apiConnected ? "Backend connected" : "Backend offline (Demo Mode Active)"}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              apiConnected ? "bg-[#34d399] animate-pulse" : "bg-[#f87171]"
+            }`}
+          />
+          <span className="hidden md:inline font-semibold">
+            {apiConnected ? "API CONNECTED" : "DEMO / OFFLINE"}
+          </span>
+        </div>
+
+        <div className="h-5 w-px bg-[#232a33] hidden sm:block" />
+
+        {/* HSM Vault Signature Key */}
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex flex-col text-right">
+            <span className="text-[10px] font-mono text-[#e6eaf0] font-semibold leading-tight">
+              ED25519:ACTIVE
+            </span>
+            <span className="text-[9px] font-mono text-[#8b95a3] leading-tight">
+              VAULT-SEC-01
+            </span>
+          </div>
+          <div
+            className="w-8 h-8 rounded bg-[#11151a] border border-[#232a33] flex items-center justify-center text-[#2dd4bf]"
+            title="Cryptographic Hardware Security Module (HSM) Online"
+          >
+            <span className="material-symbols-outlined text-lg">shield_locked</span>
+          </div>
         </div>
       </div>
     </header>
