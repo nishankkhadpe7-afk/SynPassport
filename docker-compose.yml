@@ -10,6 +10,8 @@ services:
       - SIGNING_KEY_PATH=/app/keys/ed25519_signing_key.pem
       - GLOBAL_SEED=1234
       - SYNPASSPORT_REPLAY=${SYNPASSPORT_REPLAY:-0}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gemini-1.5-flash}
     volumes:
       - ./data:/app/data
       - ./keys:/app/keys

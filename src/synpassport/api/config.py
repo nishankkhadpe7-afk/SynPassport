@@ -5,6 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 __all__ = [
     "CORS_ORIGINS",
     "DATA_DIR",
@@ -26,6 +33,10 @@ MAX_UPLOAD_SIZE: int = int(os.environ.get("MAX_UPLOAD_SIZE", 50 * 1024 * 1024))
 CORS_ORIGINS: list[str] = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3005",
+    "http://127.0.0.1:3005",
 ]
 _extra_origins = os.environ.get("CORS_ORIGINS")
 if _extra_origins:

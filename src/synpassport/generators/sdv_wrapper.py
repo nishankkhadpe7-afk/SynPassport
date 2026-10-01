@@ -57,7 +57,9 @@ class GaussianCopulaGenerator(BaseGenerator):
             for c in self.numeric_cols:
                 z_df[c] = (num_df[c].fillna(self.means[c]) - self.means[c]) / self.stds[c]
 
-            corr = z_df.corr().fillna(0.0).to_numpy()
+            # Pandas may return a read-only NumPy view; make an owned array because
+            # the positive-semi-definite normalization below updates it in place.
+            corr = z_df.corr().fillna(0.0).to_numpy(copy=True)
             # Ensure positive semi-definite
             np.fill_diagonal(corr, 1.0)
             eigval, eigvec = np.linalg.eigh(corr)

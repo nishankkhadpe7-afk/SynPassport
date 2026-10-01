@@ -1,0 +1,186 @@
+{
+  "best_candidate_id": "candidate_001",
+  "candidates_evaluated": 1,
+  "repairs_attempted": 0,
+  "verdicts": {
+    "software_testing": "PASS"
+  },
+  "candidates": [
+    {
+      "candidate_id": "candidate_001",
+      "generator": "GaussianCopula",
+      "verdicts": {
+        "software_testing": "PASS"
+      },
+      "fail_count": 0,
+      "inconclusive_count": 0,
+      "mean_score": 0.9662142857142857,
+      "csv_path": "C:\\Users\\Nishank\\Downloads\\SynPassport\\data\\runs\\run_37407a43679d\\candidate_001.csv"
+    }
+  ],
+  "repairs": [],
+  "agent_rejections": [],
+  "explanation": {
+    "summary": "Check 'schema_validity' evaluated to 1.0000 vs threshold pass -> PASS [evidence:schema_validity]\nCheck 'marginal_fidelity' evaluated to 0.9324 vs threshold {'min': 0.8} -> None [evidence:marginal_fidelity]",
+    "claims": [
+      {
+        "statement": "Check 'schema_validity' evaluated to 1.0000 vs threshold pass -> PASS",
+        "evidence_id": "schema_validity",
+        "state": "PASS",
+        "cited": true
+      },
+      {
+        "statement": "Check 'marginal_fidelity' evaluated to 0.9324 vs threshold {'min': 0.8} -> None",
+        "evidence_id": "marginal_fidelity",
+        "state": null,
+        "cited": true
+      }
+    ],
+    "flagged_claims": []
+  },
+  "passport": {
+    "passport_version": "0.1.0",
+    "dataset": {
+      "name": "candidate_001.csv",
+      "sha256": "dadc5e75130f87221aab623963e3630752e3cd08c1492153ebaf46d6d5819b0f"
+    },
+    "mission": {
+      "purpose": "software_testing",
+      "intended_uses": [
+        "software_testing"
+      ],
+      "critical_subgroups": [
+        "age >= 65"
+      ],
+      "policy_id": "software-testing",
+      "privacy_level": "standard",
+      "target_column": "churn",
+      "seed": 1234
+    },
+    "policy": {
+      "id": "software-testing",
+      "sha256": "4a17a6fb63292a9bedb1df409fe624b30d614ce3fcec51ed32b0e766b67b98be"
+    },
+    "run": {
+      "code_version": "git:7a5e793cb652",
+      "seeds": [
+        1234
+      ],
+      "candidates_evaluated": 1,
+      "repairs_attempted": 0
+    },
+    "evidence": [
+      {
+        "run_id": "run_d47db5ce",
+        "candidate_id": "candidate_001",
+        "check_id": "schema_validity",
+        "value": 1.0,
+        "ci_low": null,
+        "ci_high": null,
+        "n": 1000,
+        "threshold_ref": "pass",
+        "seed": 1234,
+        "code_version": "git:0.1.0",
+        "state": "PASS",
+        "metadata": {
+          "column_reports": {
+            "customer_id": {
+              "valid_fraction": 1.0
+            },
+            "age": {
+              "valid_fraction": 1.0
+            },
+            "city": {
+              "valid_fraction": 1.0
+            },
+            "education": {
+              "valid_fraction": 1.0
+            },
+            "employment_status": {
+              "valid_fraction": 1.0
+            },
+            "annual_income_inr": {
+              "valid_fraction": 1.0
+            },
+            "customer_segment": {
+              "valid_fraction": 1.0
+            },
+            "preferred_channel": {
+              "valid_fraction": 1.0
+            },
+            "payment_method": {
+              "valid_fraction": 1.0
+            },
+            "account_tenure_years": {
+              "valid_fraction": 1.0
+            },
+            "annual_spend_inr": {
+              "valid_fraction": 1.0
+            },
+            "purchase_count": {
+              "valid_fraction": 1.0
+            },
+            "satisfaction_score": {
+              "valid_fraction": 1.0
+            },
+            "churn": {
+              "valid_fraction": 1.0
+            }
+          }
+        },
+        "created_at": "2026-10-01T07:13:36.773096+00:00"
+      },
+      {
+        "run_id": "run_d47db5ce",
+        "candidate_id": "candidate_001",
+        "check_id": "marginal_fidelity",
+        "value": 0.9324285714285713,
+        "ci_low": null,
+        "ci_high": null,
+        "n": 1000,
+        "threshold_ref": "{'min': 0.8}",
+        "seed": 1234,
+        "code_version": "git:0.1.0",
+        "state": null,
+        "metadata": {
+          "per_feature": {
+            "customer_id": 0.6139999999999997,
+            "age": 0.9299999999999999,
+            "city": 0.971,
+            "education": 0.987,
+            "employment_status": 0.994,
+            "annual_income_inr": 0.969,
+            "customer_segment": 0.996,
+            "preferred_channel": 0.973,
+            "payment_method": 0.968,
+            "account_tenure_years": 0.95,
+            "annual_spend_inr": 0.868,
+            "purchase_count": 0.903,
+            "satisfaction_score": 0.937,
+            "churn": 0.994
+          },
+          "worst_feature": "customer_id",
+          "worst_feature_score": 0.6139999999999997
+        },
+        "created_at": "2026-10-01T07:13:36.876417+00:00"
+      }
+    ],
+    "repairs": [],
+    "agent_rejections": [],
+    "verdicts": {
+      "software_testing": "PASS"
+    },
+    "human_approval": {
+      "status": "PENDING",
+      "approver": null,
+      "timestamp": null
+    },
+    "audit_signatures": [],
+    "issued_at": "2026-10-01T07:13:37.121415+00:00",
+    "signature": {
+      "alg": "Ed25519",
+      "key_id": "f93a9a9b0ac9dc3ba0688129e80b086386843b3c731c0614cfdb70882b9a9648",
+      "value": "HiGsmInzngRXzfnLJF4jJ5BtT083pq+Oi1cCCZvDpJKpfcwRqoO/8uAK/KKMSN2h3ynLqrBc/KYgg1cERHgwDA=="
+    }
+  }
+}

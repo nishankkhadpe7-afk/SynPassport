@@ -15,7 +15,14 @@ from typing import Any
 
 from synpassport.agent.tools import AgentToolRegistry
 
-__all__ = ["BaseLLMClient", "MockLLM", "query_llm_structured"]
+__all__ = [
+    "BaseLLMClient",
+    "GeminiLLMClient",
+    "GroqLLMClient",
+    "MockLLM",
+    "create_llm_client",
+    "query_llm_structured",
+]
 
 
 class BaseLLMClient(ABC):
@@ -24,6 +31,118 @@ class BaseLLMClient(ABC):
     @abstractmethod
     def generate(self, prompt: str, system_prompt: str | None = None) -> str:
         """Generate text response from prompt and system instructions."""
+
+
+class GeminiLLMClient(BaseLLMClient):
+    """Google Gemini completion client via Generative Language REST API."""
+
+    def __init__(self, api_key: str, model: str = "gemini-1.5-flash") -> None:
+        self.api_key = api_key.strip()
+        self.model = model.strip() if model and model.strip() else "gemini-1.5-flash"
+
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        import requests
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
+        payload: dict[str, Any] = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "responseMimeType": "application/json",
+            },
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_prompt}]
+            }
+
+        headers = {"Content-Type": "application/json"}
+        resp = requests.post(url, json=payload, headers=headers, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+
+        candidates = data.get("candidates", [])
+        if not candidates:
+            raise RuntimeError(f"Gemini API returned no candidates: {data}")
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            raise RuntimeError(f"Gemini API response content has no parts: {data}")
+        return str(parts[0].get("text", ""))
+
+
+def create_llm_client(
+    api_key: str | None = None,
+    model: str | None = None,
+) -> BaseLLMClient:
+    """Factory creating an LLM client from environment or explicitly provided parameters.
+
+    Auto-detects provider from key prefix:
+      - gsk_*  → Groq (OpenAI-compatible, qwen/qwen3.8-27b default)
+      - AIza* or AQ.* → Google Gemini REST API
+    """
+    import os
+
+    resolved_key = (api_key or os.environ.get("LLM_API_KEY", "")).strip()
+    resolved_model = (model or os.environ.get("LLM_MODEL", "")).strip()
+
+    if not resolved_key:
+        return MockLLM()
+
+    # Groq key detection (gsk_ prefix)
+    if resolved_key.startswith("gsk_"):
+        groq_model = resolved_model if resolved_model else "qwen/qwen3.8-27b"
+        return GroqLLMClient(api_key=resolved_key, model=groq_model)
+
+    # Gemini key (AIza or AQ. prefix, or unknown — default to Gemini)
+    gemini_model = resolved_model if resolved_model else "gemini-1.5-flash"
+    return GeminiLLMClient(api_key=resolved_key, model=gemini_model)
+
+
+class GroqLLMClient(BaseLLMClient):
+    """Groq completion client via OpenAI-compatible REST API."""
+
+    def __init__(self, api_key: str, model: str = "qwen/qwen3.8-27b") -> None:
+        self.api_key = api_key.strip()
+        self.model = model.strip() if model and model.strip() else "qwen/qwen3.8-27b"
+
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        import requests
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.1,
+            "response_format": {"type": "json_object"},
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        resp = requests.post(url, json=payload, headers=headers, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError(f"Groq API returned no choices: {data}")
+        content = choices[0].get("message", {}).get("content", "")
+        if not content:
+            raise RuntimeError(f"Groq API response has empty content: {data}")
+        return str(content)
 
 
 class MockLLM(BaseLLMClient):
@@ -77,9 +196,18 @@ def query_llm_structured(
     for attempt in range(max_retries):
         raw_output = client.generate(current_prompt, system_prompt)
 
-        # 1. Parse JSON
+        # 1. Parse JSON (stripping markdown code fences if present)
+        clean_output = raw_output.strip()
+        if clean_output.startswith("```"):
+            lines = clean_output.split("\n")
+            if len(lines) >= 2 and lines[0].startswith("```"):
+                clean_output = "\n".join(lines[1:])
+            if clean_output.endswith("```"):
+                clean_output = clean_output[:-3]
+            clean_output = clean_output.strip()
+
         try:
-            parsed = json.loads(raw_output.strip())
+            parsed = json.loads(clean_output)
         except Exception as exc:
             err = f"Malformed JSON on attempt {attempt + 1}: {exc}"
             retry_errors.append(err)

@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from synpassport.agent.llm import create_llm_client
 from synpassport.agent.loop import AssuranceAgentLoop
 from synpassport.api.config import KEY_DIR, REPLAY_MODE
 from synpassport.api.logging import get_logger, log_run_event
@@ -177,8 +178,10 @@ def execute_run_pipeline(run_id: str) -> None:
 
         signing_key, _ = get_or_create_server_key()
 
-        # Instantiate agent loop with event listener
+        # Instantiate agent loop with event listener and configured LLM client
+        llm_client = create_llm_client()
         loop = AssuranceAgentLoop(
+            llm_client=llm_client,
             event_listener=on_event,
             replay_mode=is_replay,
         )

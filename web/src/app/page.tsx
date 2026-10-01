@@ -19,13 +19,14 @@ import {
   VerdictState,
 } from "@/types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("setup");
   const [apiConnected, setApiConnected] = useState<boolean>(false);
   const [isReplay, setIsReplay] = useState<boolean>(false);
+  const [apiUrl, setApiUrl] = useState<string>(
+    process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8765"
+  );
+  const API_BASE_URL = apiUrl;
 
   // Run execution state
   const [runId, setRunId] = useState<string | null>(null);
@@ -49,36 +50,45 @@ export default function DashboardPage() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check API health and replay mode
+  // Check API health and replay mode with multi-URL fallback
   const checkHealth = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/health`);
-      if (res.ok) {
-        setApiConnected(true);
-      } else {
-        setApiConnected(false);
-      }
+    const candidateUrls = [
+      apiUrl,
+      "http://127.0.0.1:8765",
+      "http://localhost:8765",
+    ];
 
-      // Check config endpoint for replay mode
+    for (const testUrl of candidateUrls) {
       try {
-        const configRes = await fetch(`${API_BASE_URL}/config`);
-        if (configRes.ok) {
-          const cfg = await configRes.json();
-          setIsReplay(Boolean(cfg.replay_mode));
+        const res = await fetch(`${testUrl}/health`, { mode: "cors" });
+        if (res.ok) {
+          setApiUrl(testUrl);
+          setApiConnected(true);
+
+          try {
+            const configRes = await fetch(`${testUrl}/config`, { mode: "cors" });
+            if (configRes.ok) {
+              const cfg = await configRes.json();
+              setIsReplay(Boolean(cfg.replay_mode));
+            }
+          } catch {
+            // ignore
+          }
+
+          if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get("replay") === "1") {
+              setIsReplay(true);
+            }
+          }
+          return;
         }
       } catch {
-        // Fallback: check query param if set
-        if (typeof window !== "undefined") {
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get("replay") === "1") {
-            setIsReplay(true);
-          }
-        }
+        // try next candidate URL
       }
-    } catch {
-      setApiConnected(false);
     }
-  }, []);
+    setApiConnected(false);
+  }, [apiUrl]);
 
   useEffect(() => {
     checkHealth();
@@ -283,6 +293,9 @@ export default function DashboardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Send run_id so the server reads the original signed files directly from disk,
+          // avoiding float precision mutation through JS JSON round-trip.
+          run_id: runId,
           passport,
           dataset_content: candidateCsv || "age,target\n55,0\n67,1",
           purpose: "software_testing",

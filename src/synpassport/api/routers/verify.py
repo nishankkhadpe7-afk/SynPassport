@@ -60,15 +60,32 @@ async def verify_dataset_passport(
         resolved_purpose = body.get("purpose")
         resolved_allow_warning = bool(body.get("allow_warning", False))
 
+        # Preferred path: run_id provided — read passport and dataset directly from disk,
+        # bypassing JS JSON round-trip that mutates float values and breaks the signature.
+        run_id_val = body.get("run_id")
+        if run_id_val:
+            run_dir = RUNS_DIR / str(run_id_val)
+            passport_on_disk = run_dir / "passport.json"
+            # Use the candidate CSV that was actually signed (candidate_001.csv or latest)
+            candidate_csvs = sorted(run_dir.glob("candidate_*.csv"))
+            dataset_on_disk = candidate_csvs[-1] if candidate_csvs else None
+
+            if passport_on_disk.is_file():
+                pass_file_path = passport_on_disk
+            if dataset_on_disk and dataset_on_disk.is_file():
+                data_file_path = dataset_on_disk
+
         if "dataset_path" in body and Path(body["dataset_path"]).is_file():
             data_file_path = Path(body["dataset_path"])
-        elif "dataset_content" in body:
+        elif "dataset_content" in body and data_file_path is None:
             data_file_path = staging_dir / "dataset.csv"
             data_file_path.write_text(str(body["dataset_content"]), encoding="utf-8")
 
         if "passport_path" in body and Path(body["passport_path"]).is_file():
             pass_file_path = Path(body["passport_path"])
-        elif "passport" in body:
+        elif "passport" in body and pass_file_path is None:
+            # Last resort: write the passport from the JS object — may fail sig check
+            # due to float mutation, but kept as fallback for external callers.
             pass_file_path = staging_dir / "passport.json"
             p_val = body["passport"]
             pass_file_path.write_text(

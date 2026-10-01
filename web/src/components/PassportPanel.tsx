@@ -69,7 +69,7 @@ export const PassportPanel: React.FC<PassportPanelProps> = ({
   };
 
   const humanApproval = passport?.human_approval as Record<string, unknown> | undefined;
-  const isApproved = Boolean(humanApproval?.approved);
+  const isApproved = humanApproval?.status === "APPROVED" || Boolean(humanApproval?.approved);
   const approver = humanApproval?.approver as string | undefined;
 
   return (
