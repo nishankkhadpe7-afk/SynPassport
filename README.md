@@ -159,24 +159,27 @@ SynPassport/
 
 ## Quickstart & Docker Services
 
-Launch the full stack (FastAPI backend on port 8000 + Next.js web dashboard on port 3000):
+Docker and a local run use the same ports: the API on **8765** and the dashboard on **3005**.
 
 ```bash
 # Standard live run
 docker compose up --build
 
 # Replay mode: re-serves runs already cached in replay/ (run each demo once live first)
-SYNPASSPORT_REPLAY=1 docker compose up --build
+SYNPASSPORT_REPLAY=1 docker compose up --build      # PowerShell: $env:SYNPASSPORT_REPLAY=1; docker compose up --build
 ```
 
-Docker Compose reads `LLM_API_KEY` (and optionally `LLM_MODEL`) from `.env`. If port 3000 is taken on your
-machine, run `WEB_PORT=3005 docker compose up --build` (PowerShell: `$env:WEB_PORT=3005; docker compose up --build`).
-The Docker image does not include CTGAN (it needs PyTorch); CTGAN requests fall back to the Gaussian copula and the
-passport records that. Install `pip install -e ".[ctgan]"` locally for real CTGAN training.
+- **Web Dashboard**: [http://localhost:3005](http://localhost:3005)
+- **FastAPI Documentation**: [http://localhost:8765/docs](http://localhost:8765/docs)
+- **API Health Endpoint**: [http://localhost:8765/health](http://localhost:8765/health)
 
-- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-- **FastAPI Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **API Health Endpoint**: [http://localhost:8000/health](http://localhost:8000/health)
+Docker Compose reads `LLM_API_KEY` (and optionally `LLM_MODEL`) from `.env`. Stop a locally running API or
+dashboard first, since they use the same ports. To use other ports, set `API_PORT` and/or `WEB_PORT`, for example
+`API_PORT=8800 WEB_PORT=3100 docker compose up --build` (PowerShell: `$env:API_PORT=8800; $env:WEB_PORT=3100;
+docker compose up --build`); the dashboard is built to call the API port you choose.
+
+The Docker image does not include CTGAN (it needs PyTorch); CTGAN requests fall back to the Gaussian copula and the
+passport records that. For real CTGAN training, run locally with `pip install -e ".[ctgan]"`.
 
 ---
 
@@ -233,7 +236,7 @@ On Windows without Docker, double-click `start-synpassport.bat` to do both. The 
 | `SYNPASSPORT_REPLAY` | `1` = serve identical runs from `replay/`. |
 | `SYNPASSPORT_APPROVER_TOKEN` | If set, approving a release requires this value in the `X-Approver-Token` header. |
 | `SYNPASSPORT_PUBLIC_KEY` | Trusted issuer public key for `passport verify` and the SDK. |
-| `CORS_ORIGINS` | Extra browser origins allowed to call the API (comma separated). |
+| `CORS_ORIGINS` | Extra browser origins allowed to call the API (comma separated). Ports 3000, 3001 and 3005 on localhost are allowed by default. |
 
 Optional: `pip install -e ".[ctgan]"` installs CTGAN (with PyTorch) for real CTGAN training.
 
