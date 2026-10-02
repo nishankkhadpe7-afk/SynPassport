@@ -46,6 +46,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "enum": [
                     "tune_hyperparameters",
                     "switch_generator",
+                    "regenerate_identifiers",
                     "enable_dp_training",
                 ],
             },

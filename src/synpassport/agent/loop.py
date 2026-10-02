@@ -17,20 +17,27 @@ import pandas as pd
 
 from synpassport.agent.cache import ReplayCache, compute_replay_key
 from synpassport.agent.explanation import generate_explanation
-from synpassport.agent.llm import BaseLLMClient, MockLLM, query_llm_structured
+from synpassport.agent.llm import (
+    BaseLLMClient,
+    MockLLM,
+    RuleBasedPlanner,
+    describe_llm_client,
+    query_llm_structured,
+)
 from synpassport.agent.prompts import (
     SYSTEM_PROMPT,
     format_agent_context,
     sanitize_schema_summary,
 )
-from synpassport.agent.repairs import validate_repair_action
+from synpassport.agent.repairs import normalize_target_generator, validate_repair_action
 from synpassport.agent.tools import AgentToolRegistry
 from synpassport.checks.run import run_checks_pipeline
 from synpassport.checks.splitter import split_train_holdout
 from synpassport.generators.base import BaseGenerator
 from synpassport.generators.sdv_wrapper import CTGANGenerator, GaussianCopulaGenerator
-from synpassport.passport.builder import build_passport, get_code_version
-from synpassport.policy.engine import evaluate_policy
+from synpassport.passport.builder import EvidencePassport, build_passport, get_code_version
+from synpassport.passport.canonical import canonical_hash, hash_dataset_file
+from synpassport.policy.engine import evaluate_policy_detailed
 from synpassport.policy.loader import load_policy
 
 __all__ = ["AssuranceAgentLoop"]
@@ -68,6 +75,88 @@ class AssuranceAgentLoop:
             except Exception:
                 pass
 
+    def _load_replay(
+        self,
+        cache_key: str,
+        real_data_path: str | Path,
+        out_dir: Path,
+        seed: int,
+        signing_key: Any = None,
+    ) -> dict[str, Any] | None:
+        """Return a cached bundle in replay mode, or None to run live.
+
+        The cached passport is only reused if the candidate CSV it is bound to can be
+        reproduced byte-for-byte; otherwise the run proceeds live instead of returning a
+        passport that would fail verification.
+        """
+        if not (self.replay_mode and self.replay_cache.has(cache_key)):
+            return None
+        cached = self.replay_cache.get(cache_key)
+        if cached is None:
+            return None
+
+        passport = cached.get("passport") or {}
+        dataset_block = passport.get("dataset") or {}
+        cand_name = Path(str(dataset_block.get("name", ""))).name
+        expected_sha = str(dataset_block.get("sha256", ""))
+        if not cand_name or not expected_sha:
+            return None
+
+        # Regenerate the cached best candidate with the generator and seed it used.
+        best_id = str(cached.get("best_candidate_id", ""))
+        best = next(
+            (c for c in cached.get("candidates", []) if c.get("candidate_id") == best_id),
+            None,
+        )
+        if best is not None and best.get("generator") != "GaussianCopula":
+            return None  # only the deterministic copula can be replayed exactly
+        try:
+            cand_index = int(best_id.rsplit("_", 1)[-1]) - 1
+        except ValueError:
+            return None
+        cand_seed = seed + cand_index * 10
+
+        cand_dest = out_dir / cand_name
+        real_df = pd.read_csv(real_data_path)
+        split = split_train_holdout(real_df, train_ratio=0.5, seed=seed)
+        generator = GaussianCopulaGenerator(
+            seed=cand_seed,
+            regenerate_identifiers=bool(best.get("regenerate_identifiers")) if best else False,
+        )
+        generator.fit(split.train_df)
+        generator.sample(num_rows=len(split.train_df), seed=cand_seed).to_csv(
+            cand_dest, index=False, lineterminator="\n"
+        )
+        if hash_dataset_file(cand_dest) != expected_sha:
+            cand_dest.unlink(missing_ok=True)
+            self._emit(
+                "step",
+                {"phase": "replay", "message": "Replay cache stale for this data; running live"},
+            )
+            return None
+
+        # Re-sign with the current key so replayed passports verify against it.
+        if signing_key is not None:
+            replayed = EvidencePassport(passport)
+            replayed.sign(signing_key)
+            cached = {**cached, "passport": replayed.to_dict()}
+
+        self._emit("step", {"phase": "replay", "message": "Loaded run from replay cache"})
+        for c in cached.get("candidates", []):
+            self._emit(
+                "candidate",
+                {"candidate_id": c.get("candidate_id"), "verdicts": c.get("verdicts", {})},
+            )
+        for r in cached.get("repairs", []):
+            self._emit("repair", r)
+        for rej in cached.get("agent_rejections", []):
+            self._emit("rejection", rej)
+        self._emit(
+            "finalized",
+            {"best_candidate_id": best_id, "verdicts": cached.get("verdicts", {})},
+        )
+        return cached
+
     def run(
         self,
         real_data_path: str | Path,
@@ -91,85 +180,30 @@ class AssuranceAgentLoop:
         self.max_candidates = int(policy_budget.get("max_candidates", self.max_candidates))
         self.max_repairs = int(policy_budget.get("max_repairs", self.max_repairs))
 
-        self._emit("step", {"phase": "plan", "message": "Planning assurance run..."})
+        self._emit(
+            "step",
+            {
+                "phase": "plan",
+                "message": (
+                    "Planning assurance run. Repair decisions by "
+                    f"{describe_llm_client(self.llm_client)}."
+                ),
+            },
+        )
 
-        # Reset per-run counters (guard against re-use of the same instance)
-        self.candidates_evaluated = 0
-        self.repairs_attempted = 0
-        self.agent_rejections = []
-        self.repairs_log = []
-
-        # Check replay cache
-        cache_key = compute_replay_key(mission=mission, policy_id=policy_id, seed=seed)
-        if self.replay_mode and self.replay_cache.has(cache_key):
-            cached = self.replay_cache.get(cache_key)
-            if cached is not None:
-                self._emit("step", {"phase": "replay", "message": "Loaded run from replay cache"})
-                if "candidates" in cached:
-                    for c in cached["candidates"]:
-                        self._emit("candidate", {
-                            "candidate_id": c.get("candidate_id"),
-                            "verdicts": c.get("verdicts", {}),
-                        })
-                else:
-                    self._emit("candidate", {
-                        "candidate_id": cached.get("best_candidate_id", "candidate_001"),
-                        "verdicts": cached.get("verdicts", {}),
-                    })
-                if "repairs" in cached:
-                    for r in cached["repairs"]:
-                        self._emit("repair", r)
-                if "agent_rejections" in cached:
-                    for rej in cached["agent_rejections"]:
-                        self._emit("rejection", rej)
-                self._emit("finalized", {
-                    "best_candidate_id": cached.get("best_candidate_id"),
-                    "verdicts": cached.get("verdicts", {}),
-                })
-                # Materialize candidate CSV in output_dir so callers can inspect/verify it
-                cand_name = str(
-                    cached.get("passport", {})
-                    .get("dataset", {})
-                    .get("name", "candidate_001.csv")
-                )
-                cand_dest = out_dir / cand_name
-                if not cand_dest.is_file():
-                    real_df = pd.read_csv(real_data_path)
-                    split = split_train_holdout(real_df, train_ratio=0.5, seed=seed)
-                    gen_copula = GaussianCopulaGenerator(seed=seed)
-                    gen_copula.fit(split.train_df)
-                    synth_df = gen_copula.sample(num_rows=len(split.train_df), seed=seed)
-                    synth_df.to_csv(cand_dest, index=False)
-
-                    # Rebind dataset hash in passport to match the newly generated CSV,
-                    # then re-sign so that subsequent verify() calls pass hash checks.
-                    if signing_key is not None and isinstance(cached.get("passport"), dict):
-                        import copy as _copy
-                        from synpassport.passport.canonical import (
-                            hash_canonical_csv,
-                            hash_dataset_file,
-                        )
-                        from synpassport.passport.builder import EvidencePassport
-
-                        new_sha256 = hash_dataset_file(cand_dest)
-                        try:
-                            new_canon = hash_canonical_csv(cand_dest)
-                        except Exception:
-                            new_canon = None
-
-                        updated_passport = _copy.deepcopy(cached["passport"])
-                        updated_passport.setdefault("dataset", {})["sha256"] = new_sha256
-                        updated_passport.setdefault("dataset", {})["name"] = cand_name
-                        if new_canon:
-                            updated_passport["dataset"]["canonical_sha256"] = new_canon
-                        # Clear old signature so sign() creates a fresh one
-                        updated_passport.pop("signature", None)
-                        ep = EvidencePassport(updated_passport)
-                        ep.sign(signing_key)
-                        cached = _copy.deepcopy(cached)
-                        cached["passport"] = ep.to_dict()
-
-                return cached
+        # Check replay cache (keyed on the input dataset too, so a different upload
+        # with the same mission can never receive another dataset's passport)
+        cache_key = compute_replay_key(
+            mission=mission,
+            # The policy's content hash is part of the key, so a changed policy never
+            # replays verdicts that were judged against an older version.
+            policy_id=f"{policy_id}@{canonical_hash(policy)}",
+            seed=seed,
+            dataset_sha256=hash_dataset_file(real_data_path),
+        )
+        cached_bundle = self._load_replay(cache_key, real_data_path, out_dir, seed, signing_key)
+        if cached_bundle is not None:
+            return cached_bundle
 
         # Load and partition dataset
         real_df = pd.read_csv(real_data_path)
@@ -194,8 +228,22 @@ class AssuranceAgentLoop:
             row_count=len(train_df),
         )
 
+        # Evaluate the mission's first declared critical subgroup (default: age >= 65)
+        mission_subgroups = mission.get("critical_subgroups") or []
+        subgroup_query = str(mission_subgroups[0]) if mission_subgroups else "age >= 65"
+
         current_generator = "GaussianCopula"
         current_params: dict[str, Any] = {}
+        regenerate_ids = False
+        last_check_states: dict[str, str] = {}
+
+        def rule_decision() -> dict[str, Any]:
+            return RuleBasedPlanner.decide(
+                current_generator,
+                current_params,
+                check_states=last_check_states,
+                regenerating_identifiers=regenerate_ids,
+            )
         candidate_history: list[dict[str, Any]] = []
 
         # -------------------------------------------------------------
@@ -214,19 +262,41 @@ class AssuranceAgentLoop:
             cand_seed = seed + self.candidates_evaluated * 10
             gen: BaseGenerator
             if current_generator == "CTGAN":
-                epochs = int(current_params.get("epochs", 50))
-                gen = CTGANGenerator(epochs=epochs, seed=cand_seed)
+                gen = CTGANGenerator(
+                    epochs=int(current_params.get("epochs", 50)),
+                    batch_size=int(current_params.get("batch_size", 100)),
+                    regenerate_identifiers=regenerate_ids,
+                    seed=cand_seed,
+                )
             else:
-                gen = GaussianCopulaGenerator(seed=cand_seed)
+                gen = GaussianCopulaGenerator(
+                    seed=cand_seed, regenerate_identifiers=regenerate_ids
+                )
 
             gen.fit(train_df)
+            # Record the model that actually produced the data (CTGAN may fall back).
+            actual_generator = str(getattr(gen, "backend", current_generator))
+            fallback_reason = getattr(gen, "fallback_reason", None)
             synth_df = gen.sample(num_rows=len(train_df), seed=cand_seed)
-            synth_df.to_csv(cand_csv, index=False)
+            # Fixed "\n" line endings so the signed bytes are identical on every OS.
+            synth_df.to_csv(cand_csv, index=False, lineterminator="\n")
             self.candidates_evaluated += 1
-            self._emit(
-                "candidate",
-                {"candidate_id": candidate_id, "generator": current_generator},
-            )
+            candidate_event: dict[str, Any] = {
+                "candidate_id": candidate_id,
+                "generator": actual_generator,
+            }
+            if fallback_reason:
+                candidate_event["requested_generator"] = current_generator
+                candidate_event["note"] = fallback_reason
+            elif getattr(gen, "note", None):
+                candidate_event["note"] = str(gen.note)
+            if regenerate_ids and "note" not in candidate_event:
+                ids = getattr(getattr(gen, "prep", None), "side_cols", [])
+                candidate_event["note"] = (
+                    f"{len(ids)} identifier column(s) replaced with fresh values in the same "
+                    "format; no real identifier copied"
+                )
+            self._emit("candidate", candidate_event)
 
             # 3. Evaluation engine (runs 8 checks against holdout isolated partition)
             evidence_records = run_checks_pipeline(
@@ -238,10 +308,14 @@ class AssuranceAgentLoop:
                 candidate_id=candidate_id,
                 seed=cand_seed,
                 target_col=target_col,
+                subgroup_query=subgroup_query,
             )
 
             # 4. Deterministic policy engine verdicts
-            verdicts = evaluate_policy(policy, evidence_records)
+            bundle = evaluate_policy_detailed(policy, evidence_records)
+            verdicts = bundle.verdicts
+            check_states = {cid: ev.state.value for cid, ev in bundle.check_evaluations.items()}
+            last_check_states = check_states
             self._emit(
                 "evaluation",
                 {"candidate_id": candidate_id, "verdicts": verdicts},
@@ -254,11 +328,14 @@ class AssuranceAgentLoop:
 
             cand_record = {
                 "candidate_id": candidate_id,
-                "generator": current_generator,
+                "generator": actual_generator,
+                "requested_generator": current_generator,
                 "params": copy.deepcopy(current_params),
+                "regenerate_identifiers": regenerate_ids,
                 "csv_path": str(cand_csv),
                 "evidence": evidence_records,
                 "verdicts": verdicts,
+                "check_states": check_states,
                 "fail_count": fail_count,
                 "inconclusive_count": inconclusive_count,
                 "mean_score": mean_score,
@@ -289,13 +366,38 @@ class AssuranceAgentLoop:
                 agent_rejections=self.agent_rejections,
             )
 
-            decision, err_logs = query_llm_structured(
-                client=self.llm_client,
-                prompt=context_prompt,
-                system_prompt=SYSTEM_PROMPT,
-                tool_registry=self.tool_registry,
-                max_retries=3,
-            )
+            decided_by = describe_llm_client(self.llm_client)
+            decision: dict[str, Any] | None
+            err_logs: list[str]
+            if isinstance(self.llm_client, RuleBasedPlanner):
+                decision = rule_decision()
+                err_logs = []
+            else:
+                try:
+                    decision, err_logs = query_llm_structured(
+                        client=self.llm_client,
+                        prompt=context_prompt,
+                        system_prompt=SYSTEM_PROMPT,
+                        tool_registry=self.tool_registry,
+                        max_retries=3,
+                        allowed_actions={"propose_repair", "finalize"},
+                    )
+                except Exception as exc:
+                    # Network errors, rate limits or an exhausted quota must not end the run.
+                    reason = f"{type(exc).__name__}: {str(exc)[:160]}"
+                    self._emit(
+                        "step",
+                        {
+                            "phase": "fallback",
+                            "message": (
+                                f"{decided_by} unavailable ({reason}). "
+                                "Falling back to the rule-based planner."
+                            ),
+                        },
+                    )
+                    decided_by = "rule-based planner (LLM fallback)"
+                    decision = rule_decision()
+                    err_logs = []
 
             # Record any rejected attempts or schema errors from the turn
             for err in err_logs:
@@ -313,10 +415,35 @@ class AssuranceAgentLoop:
                 self._emit("rejection", {"proposal": proposal_name, "reason": err})
 
             if decision is None:
-                break
+                self._emit(
+                    "step",
+                    {
+                        "phase": "fallback",
+                        "message": (
+                            f"{decided_by} gave no valid decision after retries. "
+                            "Falling back to the rule-based planner."
+                        ),
+                    },
+                )
+                decided_by = "rule-based planner (LLM fallback)"
+                decision = rule_decision()
 
             action = str(decision.get("action"))
             args = decision.get("args") or {}
+            thought = str(decision.get("thought_summary") or "").strip()
+            if len(thought) > 1200:  # keep events and the passport readable
+                thought = thought[:1200].rsplit(" ", 1)[0] + " …"
+            chosen = action
+            if action == "propose_repair":
+                chosen = f"repair: {args.get('action')}"
+            self._emit(
+                "decision",
+                {
+                    "message": thought,
+                    "decided_by": decided_by,
+                    "decision": chosen,
+                },
+            )
 
             if action == "finalize":
                 break
@@ -327,39 +454,58 @@ class AssuranceAgentLoop:
 
                 # Validate proposal against strict whitelist
                 is_valid, reason = validate_repair_action(repair_action, repair_params)
+                if (
+                    is_valid
+                    and repair_action == "switch_generator"
+                    and normalize_target_generator(repair_params) == current_generator
+                ):
+                    is_valid, reason = False, f"Already using {current_generator}"
+                if is_valid and repair_action == "regenerate_identifiers" and regenerate_ids:
+                    is_valid, reason = False, "Identifiers are already being regenerated"
                 if not is_valid:
                     self.agent_rejections.append({
                         "proposal": f"{repair_action}: {repair_params}",
                         "reason": reason,
                     })
                     self._emit("rejection", {"proposal": repair_action, "reason": reason})
-                    break
+                    # Replace the invalid proposal with the next rule-based repair.
+                    fallback = rule_decision()
+                    repair_action = str(fallback["args"]["action"])
+                    repair_params = dict(fallback["args"]["params"])
+                    self._emit(
+                        "decision",
+                        {
+                            "message": fallback["thought_summary"],
+                            "decided_by": "rule-based planner (replacing rejected proposal)",
+                            "decision": f"repair: {repair_action}",
+                        },
+                    )
+
+                if repair_action == "switch_generator":
+                    # Record the canonical form so the passport shows exactly what ran.
+                    repair_params = {"target_generator": normalize_target_generator(repair_params)}
 
                 # Apply whitelisted repair
-                self.repairs_log.append({
+                repair_entry: dict[str, Any] = {
                     "action": repair_action,
                     "params": repair_params,
                     "candidate_id": candidate_id,
-                })
+                }
+                if repair_action == "tune_hyperparameters" and current_generator != "CTGAN":
+                    repair_entry["note"] = (
+                        "GaussianCopula has no tunable hyperparameters; these parameters "
+                        "only take effect if the generator is switched to CTGAN"
+                    )
+                self.repairs_log.append(repair_entry)
                 self.repairs_attempted += 1
-                self._emit("repair", {
-                    "action": repair_action,
-                    "params": repair_params,
-                    "candidate_id": candidate_id,
-                })
+                self._emit("repair", copy.deepcopy(repair_entry))
 
-                if repair_action == "tune_hyperparameters":
+                if repair_action == "regenerate_identifiers":
+                    regenerate_ids = True
+                elif repair_action == "tune_hyperparameters":
                     current_params.update(repair_params)
                 elif repair_action == "switch_generator":
-                    current_generator = repair_params.get(
-                        "target_generator",
-                        "CTGAN" if current_generator == "GaussianCopula" else "GaussianCopula",
-                    )
-                elif repair_action == "enable_dp_training":
-                    current_params["dp_enabled"] = True
-                    current_params["dp_epsilon"] = float(repair_params.get("epsilon") or repair_params.get("eps") or 1.0)
-                    current_params["dp_delta"] = float(repair_params.get("delta") or 1e-5)
-                    current_params["dp_accountant"] = str(repair_params.get("accountant", "rdp"))
+                    current_generator = str(repair_params["target_generator"])
             else:
                 # Any other proposal not part of repair flow is rejected
                 self.agent_rejections.append({
@@ -394,7 +540,6 @@ class AssuranceAgentLoop:
             "seeds": [seed],
             "candidates_evaluated": self.candidates_evaluated,
             "repairs_attempted": self.repairs_attempted,
-            "mode": "replay" if self.replay_mode else "live",
         }
 
         passport = build_passport(
@@ -423,6 +568,8 @@ class AssuranceAgentLoop:
                 "inconclusive_count": c["inconclusive_count"],
                 "mean_score": c["mean_score"],
                 "csv_path": c["csv_path"],
+                "regenerate_identifiers": c.get("regenerate_identifiers", False),
+                "check_states": c.get("check_states", {}),
             }
             for c in candidate_history
         ]

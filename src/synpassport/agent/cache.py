@@ -1,6 +1,6 @@
 """Replay cache for recording and replaying LLM responses and candidate runs.
 
-Keys records by (mission, policy_id, seed) and persists artifacts into replay/.
+Keys records by (mission, policy_id, seed, input dataset hash) and persists artifacts into replay/.
 Enables completely deterministic offline replay mode with zero network calls.
 """
 
@@ -15,13 +15,20 @@ from synpassport.passport.canonical import canonical_hash
 __all__ = ["ReplayCache", "compute_replay_key"]
 
 
-def compute_replay_key(mission: dict[str, Any], policy_id: str, seed: int) -> str:
-    """Compute deterministic SHA-256 cache key from mission, policy, and seed."""
-    key_payload = {
+def compute_replay_key(
+    mission: dict[str, Any],
+    policy_id: str,
+    seed: int,
+    dataset_sha256: str | None = None,
+) -> str:
+    """Compute deterministic SHA-256 cache key from mission, policy, seed and input data."""
+    key_payload: dict[str, Any] = {
         "mission": mission,
         "policy_id": policy_id,
         "seed": seed,
     }
+    if dataset_sha256 is not None:
+        key_payload["dataset_sha256"] = dataset_sha256
     return canonical_hash(key_payload)
 
 

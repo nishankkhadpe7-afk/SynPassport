@@ -15,6 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from synpassport.checks.base import BaseCheck, CheckResult
 from synpassport.checks.bootstrap import compute_bootstrap_ci
+from synpassport.checks.identifiers import comparable_frames
 
 __all__ = ["DCRVsHoldoutCheck", "MembershipInferenceCheck"]
 
@@ -25,6 +26,8 @@ def _encode_and_scale(
     synth: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Encode categorical columns and scale numeric columns onto a shared [0, 1] space."""
+    # Unique identifiers would make every distance meaningless; leave them out.
+    real_train, (real_holdout, synth), _ids = comparable_frames(real_train, real_holdout, synth)
     common_cols = [
         c for c in real_train.columns if c in real_holdout.columns and c in synth.columns
     ]

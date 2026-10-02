@@ -46,6 +46,7 @@ class RunStatusResponse(BaseModel):
     agent_rejections: list[dict[str, Any]] = Field(default_factory=list)
     budget_used: BudgetUsed = Field(default_factory=BudgetUsed)
     verdicts: dict[str, str] = Field(default_factory=dict)
+    best_candidate_id: str | None = None
     error: str | None = None
 
 

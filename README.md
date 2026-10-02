@@ -19,8 +19,8 @@ Question answered: *given this purpose and this policy, is there enough evidence
 ### How It Works at a High Level
 1. **Purpose-First Ingestion**: The user declares an empirical mission (primary purpose, critical subgroups, risk mitigation level, and intended uses).
 2. **Pre-Registered Policy Profiles**: The assurance policy is selected and hashed with SHA-256 before testing begins; thresholds are immutable in code.
-3. **Separation of Powers**: An LLM agent explores generators, diagnoses failures, and selects from a strict whitelist of repairs (`tune_hyperparameters`, `switch_generator`, `enable_dp_training`) under hard budget limits ($\le 3$ candidates, $\le 2$ repairs).
-4. **Isolated Adversarial Testing**: An independent evaluation engine runs 8 pre-registered checks (including holdout-isolated DCR distance and Membership Inference Attacks). The agent only observes aggregate metrics, never holdout records.
+3. **Separation of Powers**: An LLM agent (Groq or Gemini) diagnoses failures and selects from a strict whitelist of repairs (`regenerate_identifiers`, `switch_generator`, `tune_hyperparameters`) under hard budget limits ($\le 3$ candidates, $\le 2$ repairs). Invalid proposals are rejected and logged; if the LLM is unavailable, a rule-based planner takes over and the timeline says so.
+4. **Isolated Adversarial Testing**: An independent evaluation engine runs up to 9 pre-registered checks (including identifier leakage, holdout-isolated DCR distance and membership inference attacks). The agent only observes aggregate metrics, never data rows.
 5. **Deterministic Policy Engine**: A pure Python engine evaluates evidence rows against policy thresholds to assign independent verdicts (`PASS`, `WARNING`, `FAIL`, or `INSUFFICIENT_EVIDENCE`) per intended use.
 6. **Cryptographic Binding & Human Accountability**: The run produces a canonical JSON Evidence Passport bound to the raw dataset bytes via SHA-256 and signed with Ed25519. Final release requires an accountable human approver.
 7. **Downstream Enforcement**: The `load_dataset()` loader guard, `passport verify` CLI, and GitHub Action CI gate verify signatures, dataset hashes, and purpose compatibility before allowing consumption.
@@ -34,11 +34,11 @@ SynPassport converts synthetic data deployment from an unverified honor system i
 
 - **Purpose-Scoped Verdicts**: Independent verdicts for distinct intended uses (e.g., `software_testing: PASS`, `clinical_ml: INSUFFICIENT_EVIDENCE`), replacing misleading aggregate quality scores.
 - **Strict Separation of Powers**:
-  - LLM agents propose repairs from a whitelisted set; they cannot modify thresholds or assign verdicts.
+  - LLM agents propose repairs from a whitelisted set (`switch_generator`, `tune_hyperparameters`, `regenerate_identifiers`); they cannot modify thresholds or assign verdicts. If no LLM key is set, or the LLM call fails, a rule-based planner makes the same kind of whitelisted decision and the timeline says so.
   - The deterministic policy engine computes verdicts as a pure function.
   - Human release approval is cryptographically countersigned into the passport audit trail.
 - **Pre-Registered Policy Profiles**: Versioned YAML profiles (`software-testing`, `ml-prototyping`, `ml-sensitive-v1`) with locked SHA-256 digests.
-- **8 Pre-Registered Empirical Checks & Privacy Attacks**:
+- **9 Pre-Registered Empirical Checks & Privacy Attacks**:
   1. *Schema Validity*: Types, domains, categorical distributions, and null structures.
   2. *Marginal Fidelity*: Kolmogorov-Smirnov and Total Variation distances.
   3. *Correlation Fidelity*: Pairwise association and covariance matrix alignment.
@@ -47,14 +47,15 @@ SynPassport converts synthetic data deployment from an unverified honor system i
   6. *Distance to Closest Record (DCR)*: Empirical distance distributions vs locked holdout baseline.
   7. *Membership Inference Attack (MIA)*: Adversarial attack model AUC evaluation.
   8. *Subgroup Sample Size Sufficiency*: Statistical power analysis enforcing actionable refusal ("need $\ge N$ records").
+  9. *Identifier Leakage*: Share of synthetic identifiers (transaction IDs, card hashes, IP addresses) copied from the real training data. Identifier columns are detected by code from the real data, never chosen by the agent, and are left out of distribution, distance and utility checks.
 - **Explicit Uncertainty & Actionable Refusal**: Missing checks or wide confidence intervals yield `INSUFFICIENT_EVIDENCE`—never a weak or assumed pass.
 - **Ed25519 Signed & Hash-Bound Evidence Passports**: Canonical JSON serialization signed with Ed25519 and bound to the dataset's exact SHA-256 byte digest.
 - **Multi-Layer Enforcement**:
-  - *Python SDK Loader Guard*: `synpassport.load_dataset(path, purpose=...)` halts with `PassportTamperedError` on modified bytes or unsupported purposes.
+  - *Python SDK Loader Guard*: `synpassport.load_dataset(path, purpose=...)` raises `PassportError` (with a `reason_code` such as `DATASET_HASH_MISMATCH`) on modified bytes, bad signatures or unsupported purposes.
   - *CLI*: `passport verify` exits with explicit exit codes (`0` verified, `1` tampered/unsupported, `2` usage error).
   - *CI/CD Gate*: Composite GitHub Action failing CI pipelines on invalid passports.
 - **Next.js 14 Dashboard & FastAPI Backend**: Full dashboard in `web/` featuring live SSE agent timelines, budget meters, confidence interval drill-downs, DCR histograms, and a live tamper workbench.
-- **Deterministic Replay Mode**: Built-in deterministic replay (`SYNPASSPORT_REPLAY=1`) for offline testing and presentations.
+- **Deterministic Replay Mode**: With `SYNPASSPORT_REPLAY=1`, a run with the same dataset, mission, seed and policy version is served from `replay/` instead of calling the LLM again. A policy change invalidates old cache entries.
 
 ---
 
@@ -100,7 +101,7 @@ flowchart TD
     end
 
     subgraph EvalEngine["3. Pre-Registered Check Engine"]
-        Loop --> Checks["8 Empirical Checks & Adversarial Attacks"]
+        Loop --> Checks["9 Empirical Checks & Adversarial Attacks"]
         Split -. Isolated Holdout .-> Checks
         Checks --> Store[("SQLite Evidence Store<br/>Value, 95% CI, Seed, Git SHA")]
     end
@@ -146,14 +147,14 @@ flowchart TD
 ```
 SynPassport/
 ├── policies/                    # Versioned YAML policy profiles
-│   ├── software-testing.yaml    # Functional testing profile (schema + marginal fidelity)
+│   ├── software-testing.yaml    # Functional testing profile (schema, identifier leakage, marginal fidelity)
 │   ├── ml-prototyping.yaml      # General ML prototyping (adds correlation & utility)
 │   └── ml-sensitive-v1.yaml     # High-assurance profile (adversarial attacks + subgroup CI)
 ├── src/synpassport/             # Core Python package
 │   ├── agent/                   # Agent loop, tool registry, and repair whitelist
-│   ├── api/                     # FastAPI backend (routers for runs, evidence, SSE, verify)
-│   ├── checks/                  # 8 pre-registered checks and adversarial privacy attacks
-│   ├── cli/                     # Typer / argparse CLI entrypoints (`passport`)
+│   ├── api/                     # FastAPI backend (routers for runs, evidence, DCR, SSE, policies, verify)
+│   ├── checks/                  # 9 pre-registered checks, privacy attacks, identifier handling
+│   ├── cli/                     # argparse CLI entrypoint (`passport`)
 │   ├── evidence/                # SQLite append-only evidence store and models
 │   ├── generators/              # Synthetic data generator interfaces (Gaussian Copula, CTGAN)
 │   ├── mission/                 # Mission schema and restricted subgroup expression parser
@@ -164,11 +165,13 @@ SynPassport/
 │   ├── src/app/                 # App Router pages, layout, and global styling
 │   ├── src/components/          # Dashboard components for all 7 screens
 │   ├── src/types/               # TypeScript interface declarations
+│   ├── src/fonts/               # Bundled wordmark font (Source Serif 4, SIL OFL)
 │   └── Dockerfile               # Production Next.js container configuration
+├── examples/                    # Synthetic demo datasets (card transactions, heart disease)
 ├── .github/actions/verify/      # Composite GitHub Action for CI/CD pipeline gating
-├── replay/                      # Deterministic cached runs for presentation fallback
+├── replay/                      # Local cache for replay mode (contents are git-ignored)
 ├── scripts/                     # End-to-end verification and pipeline scripts
-├── tests/                       # Unit, property, and integration test suite (112 tests)
+├── tests/                       # Unit, property, and integration test suite (143 tests)
 ├── docker-compose.yml           # Multi-container orchestration (API + Web)
 ├── Dockerfile                   # Python backend container configuration
 └── pyproject.toml               # Python project configuration, dependencies, and entrypoints
@@ -178,19 +181,27 @@ SynPassport/
 
 ## Quickstart & Docker Services
 
-Launch the full stack (FastAPI backend on port 8000 + Next.js web dashboard on port 3000):
+Docker and a local run use the same ports: the API on **8765** and the dashboard on **3005**.
 
 ```bash
 # Standard live run
 docker compose up --build
 
-# Deterministic demo replay mode (recommended for live presentations)
-SYNPASSPORT_REPLAY=1 docker compose up --build
+# Replay mode: re-serves runs already cached in replay/ (run each demo once live first)
+SYNPASSPORT_REPLAY=1 docker compose up --build      # PowerShell: $env:SYNPASSPORT_REPLAY=1; docker compose up --build
 ```
 
-- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-- **FastAPI Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **API Health Endpoint**: [http://localhost:8000/health](http://localhost:8000/health)
+- **Web Dashboard**: [http://localhost:3005](http://localhost:3005)
+- **FastAPI Documentation**: [http://localhost:8765/docs](http://localhost:8765/docs)
+- **API Health Endpoint**: [http://localhost:8765/health](http://localhost:8765/health)
+
+Docker Compose reads `LLM_API_KEY` (and optionally `LLM_MODEL`) from `.env`. Stop a locally running API or
+dashboard first, since they use the same ports. To use other ports, set `API_PORT` and/or `WEB_PORT`, for example
+`API_PORT=8800 WEB_PORT=3100 docker compose up --build` (PowerShell: `$env:API_PORT=8800; $env:WEB_PORT=3100;
+docker compose up --build`); the dashboard is built to call the API port you choose.
+
+The Docker image does not include CTGAN (it needs PyTorch); CTGAN requests fall back to the Gaussian copula and the
+passport records that. For real CTGAN training, run locally with `pip install -e ".[ctgan]"`.
 
 ---
 
@@ -204,8 +215,8 @@ SYNPASSPORT_REPLAY=1 docker compose up --build
 
 ```bash
 # Clone and configure environment
-git clone https://github.com/organization/synpassport.git
-cd synpassport
+git clone https://github.com/nishankkhadpe7-afk/SynPassport.git
+cd SynPassport
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
@@ -222,23 +233,59 @@ npm install
 npm run build
 ```
 
+### Run locally
+
+```bash
+# Terminal 1: API on http://127.0.0.1:8765
+PYTHONPATH=src python -m uvicorn synpassport.api.main:app --host 127.0.0.1 --port 8765
+
+# Terminal 2: dashboard on http://localhost:3005
+cd web
+npm run start -- -p 3005
+```
+
+On Windows without Docker, double-click `start-synpassport.bat` to do both. The dashboard reads the API address from
+`web/.env.local` (`NEXT_PUBLIC_API_URL=http://127.0.0.1:8765`). Put your LLM key in `.env`
+(`LLM_API_KEY=...`, a Groq `gsk_` key works); without one, a rule-based planner makes the repair decisions.
+
+### Configuration (`.env`)
+
+| Variable | Purpose |
+|---|---|
+| `LLM_API_KEY` | Groq (`gsk_...`) or Gemini key for the repair agent. Empty = rule-based planner. `GROQ_API_KEY` also works. |
+| `LLM_MODEL` | Optional model override (Groq default: `qwen/qwen3.8-27b`). |
+| `DATA_DIR` | Where runs, evidence and the server signing keypair are stored (default `./data`). |
+| `SYNPASSPORT_REPLAY` | `1` = serve identical runs from `replay/`. |
+| `SYNPASSPORT_APPROVER_TOKEN` | If set, approving a release requires this value in the `X-Approver-Token` header. |
+| `SYNPASSPORT_PUBLIC_KEY` | Trusted issuer public key for `passport verify` and the SDK. |
+| `CORS_ORIGINS` | Extra browser origins allowed to call the API (comma separated). Ports 3000, 3001 and 3005 on localhost are allowed by default. |
+
+Optional: `pip install -e ".[ctgan]"` installs CTGAN (with PyTorch) for real CTGAN training.
+
 ---
 
 ## Usage Guide
 
 ### 1. Command-Line Interface (`passport`)
 
-The CLI exposes four subcommands for verification, issuance, approval, and inspection:
+The CLI exposes four subcommands for verification, issuance, approval, and inspection.
+Create a signing keypair first with `python -m synpassport.passport.keygen` (writes `keys/ed25519_private.pem`
+and `keys/ed25519_public.pem`). Passports issued by the dashboard API are signed with the server key in
+`data/keys/api_private.pem`; verify them with `data/keys/api_public.pem`.
 
 ```bash
-# 1. Cryptographically verify a synthetic dataset against an Evidence Passport
-passport verify data/candidate.csv data/candidate.passport.json --purpose software_testing
+# 1. Cryptographically verify a synthetic dataset against an Evidence Passport.
+#    The issuer's public key must be supplied (or set SYNPASSPORT_PUBLIC_KEY); keys found
+#    next to the passport are never trusted.
+passport verify data/candidate.csv data/candidate.passport.json --purpose software_testing \
+  --public-key keys/ed25519_public.pem
 
-# 2. Issue a new Evidence Passport for evaluated data
-passport issue --data data/real.csv --synth data/candidate.csv --policy software-testing --output passport.json
+# 2. Issue a new signed Evidence Passport for evaluated data
+passport issue --data data/real.csv --synth data/candidate.csv --policy software-testing \
+  --key keys/ed25519_private.pem --output passport.json
 
 # 3. Countersign human release approval
-passport approve passport.json --approver auditor@enterprise.org --key keys/ed25519_signing_key.pem
+passport approve passport.json --approver auditor@enterprise.org --key keys/ed25519_private.pem
 
 # 4. Inspect passport contents and audit trail in JSON format
 passport inspect passport.json --json
@@ -265,6 +312,7 @@ try:
         dataset_path="data/synthetic_candidate.csv",
         purpose="clinical_ml",
         passport_path="data/synthetic_candidate.passport.json",
+        public_key="keys/ed25519_public.pem",  # trusted issuer key
     )
     print(f"Dataset verified for clinical ML! Loaded {len(df)} records.")
 except PassportError as err:
@@ -296,6 +344,8 @@ jobs:
           passport: "data/synthetic_candidate.passport.json"
           purpose: "clinical_ml"
           allow-warning: "false"
+          # Trusted issuer key, kept where the data author cannot replace it
+          public-key: "trusted-keys/synpassport_issuer.pem"
 
       - name: Train Downstream Model
         run: python -m model.train --data data/synthetic_candidate.csv
@@ -305,51 +355,51 @@ jobs:
 
 ## Next.js Web Dashboard
 
-The web dashboard ([`web/`](file:///c:/Users/Nishank/Downloads/SynPassport/web)) provides a 7-screen assurance cockpit:
+The web dashboard ([`web/`](web/)) provides a 7-screen assurance cockpit:
 
-1. **Mission Setup**: Upload dataset, declare target column, critical subgroups (`age >= 65`), risk mitigation level, and intended uses. Displays locked policy profile ID and canonical SHA-256 digest.
-2. **Run View (Live Agent Timeline)**: Real-time Server-Sent Events (SSE) stream (`/runs/{id}/events`) detailing agent planning, candidate generation, check executions, diagnostic explanations, and repair proposals alongside candidate and repair budget meters.
-3. **Verdict Board**: Independent cards per intended use (`software_testing`, `clinical_ml`, `ml_prototyping`) showing state badges, pre-registered required check lists, and policy-driven blocking reasons.
-4. **Evidence Drill-Down**: Interactive check table with 95% Confidence Interval error-bar plots vs policy threshold boundaries, and DCR comparison histograms (holdout baseline vs synthetic distribution).
-5. **Sufficiency Panel**: Subgroup power analysis displaying prominent banner *"need &ge; 171 records aged 65+"*, current count $N=35$, missing record deficit, and projected CI width ($\pm 0.320$) vs target ($\le 0.150$).
-6. **Passport Panel**: Syntax-highlighted canonical JSON viewer, download button, human approval modal (`POST /runs/{id}/approve`), and cryptographic verification trigger.
-7. **Tamper Demo Workbench**: Dual-panel demonstration. Panel 1 runs live verification on modified CSVs and displays `DATASET_HASH_MISMATCH` with digest divergence. Panel 2 displays the terminal loader guard exception (`PassportTamperedError`).
+1. **Mission Setup**: Upload a dataset, declare the target column, a critical subgroup (`age >= 65`) and intended uses. The policy is chosen from the intended uses (the strictest one needed) and its real SHA-256 digest is fetched from `GET /policies/{id}`. Warns when the target or subgroup column is not in the file.
+2. **Agent Timeline**: Live Server-Sent Events stream (`/runs/{id}/events`) of candidate generation, evaluations, agent decisions (who decided and why), whitelisted repairs and rejected proposals, with candidate and repair budget meters.
+3. **Verdict Board**: One card per intended use with the policy's required checks; the reasons are built from the signed candidate's actual check results.
+4. **Evidence Drill-Down**: Every check with its value, 95% confidence interval and policy threshold, labelled with the candidate the passport signs, plus distance-to-closest-record histograms computed from the run's own files (`GET /runs/{id}/dcr`).
+5. **Sufficiency Panel**: Subgroup power analysis: how many records the critical subgroup has, how many it needs, and the resulting confidence-interval width.
+6. **Passport Panel**: Dataset hash, policy hash and Ed25519 signature, the canonical JSON with copy and download, human approval (`POST /runs/{id}/approve`, optionally protected by `SYNPASSPORT_APPROVER_TOKEN`), and server-side verification.
+7. **Tamper Test**: Loads the exact file the passport signs, lets you change one cell (or edit freely), recomputes the SHA-256 in the browser and asks the server to verify. A changed file fails with `DATASET_HASH_MISMATCH`, and the loader-guard panel shows the `PassportError` a training script would get.
 
 ---
 
 ## 90-Second Demo Runbook
 
-Reference: [`docs/instructions.md §6`](file:///c:/Users/Nishank/Downloads/SynPassport/docs/instructions.md#L137-L155)
+Reference: [`docs/instructions.md`](docs/instructions.md)
 
-### Pre-Demo Checklist
-- [x] Docker image built: `SYNPASSPORT_REPLAY=1 docker compose up --build` works offline.
-- [x] Fixed random seeds: Candidate 1 reproducibly triggers privacy risk bounds under adversarial attacks.
-- [x] Benchmark dataset and tampered cell samples ready.
-- [x] Browser tabs opened: Dashboard ([http://localhost:3000](http://localhost:3000)) and terminal.
+### Demo datasets
 
-### Golden-Path Presentation Script (6 Steps)
+Two synthetic demo datasets (made-up records, no real people) are in [`examples/`](examples/):
+
+| File | Rows | Setup | What it shows |
+|---|---|---|---|
+| `card_transactions_4000.csv` | 4,000 | Target `is_fraud`, subgroup `age >= 65` | Candidate 1 copies real transaction IDs, card hashes and IPs, so **identifier leakage fails**. The agent applies `regenerate_identifiers`; candidate 2 passes software testing. With ML uses ticked, ML prototyping still fails (utility too low for a rare fraud label): approved for testing, blocked for ML. |
+| `heart_disease_5000.csv` | 5,000 | Target `target`, subgroup `age >= 65`, tick Clinical ML | The clinical policy (`ml-sensitive-v1`) is selected. Candidate 1 passes software testing and ML prototyping but is **insufficient evidence** for clinical ML (membership-inference CI crosses 0.55); the agent tries CTGAN and longer training, and the best candidate is kept. |
+
+### Golden-Path Presentation Script
 
 | Step | Action | Verifies Principle |
 |---|---|---|
-| **1. Purpose First Setup** | Open dashboard, click *Load Heart Disease Benchmark*, select Primary Purpose = `clinical_ml`, critical subgroup = `age >= 65`, and intended uses = `[software_testing, clinical_ml]`. Policy ID `software-testing` and SHA-256 digest are pre-registered and locked. | Pre-registration &amp; Purpose-First binding |
-| **2. Adversarial Privacy &amp; Diagnosis** | Click *Initialize Assurance Run*. In the live SSE Timeline, Candidate 1 fails the DCR/MIA adversarial attack. The agent diagnoses memorization and reports risk evidence. | Adversarial testing &amp; diagnostic explanation |
-| **3. Bounded Whitelisted Repair** | Agent proposes a whitelisted repair (`enable_dp_training` or `tune_hyperparameters`). Policy rules validate proposal against hard budget caps ($N \le 3$ candidates, $R \le 2$ repairs). Candidate 2 passes adversarial privacy tests. | Bounded repair loop (no LLM drift) |
-| **4. Purpose-Scoped Verdicts &amp; Sufficiency** | Navigate to *Verdict Board* and *Sufficiency*: `software_testing` receives **PASS**, while `clinical_ml` receives **INSUFFICIENT_EVIDENCE**. The Sufficiency panel highlights: *"need &ge; 171 records aged 65+"* with current sample $N=35$. | Actionable refusal &amp; Explicit uncertainty |
-| **5. Evidence Passport &amp; Tamper Verification** | Under *Evidence Passport*, view canonical JSON and execute human approval with an auditor identity. In *Tamper Demo*, click *Tamper 1 Cell* (+0.1 cholesterol) and verify: cryptographic validation fails visibly with `DATASET_HASH_MISMATCH`. | Tamper evidence &amp; cryptographic binding |
-| **6. Enforceability via Loader Guard** | Inspect the loader guard panel: calling `synpassport.load_dataset("candidate.csv", purpose="clinical_ml")` on the modified dataset raises `PassportTamperedError`, halting execution before downstream modeling. | Enforceability in code (supports audit) |
+| **1. Purpose first** | Load `examples/card_transactions_4000.csv`, set target `is_fraud`, tick the intended uses. The policy profile and its SHA-256 are shown and locked before any data is generated. | Pre-registration and purpose binding |
+| **2. Find the leak** | Start the run. Candidate 1 fails `identifier_leakage` (real IDs copied). | Evidence over trust |
+| **3. Bounded repair** | The agent (Groq, or the rule-based planner) proposes `regenerate_identifiers`; code validates it against the whitelist and budget (max 3 candidates, 2 repairs). Candidate 2 has fresh IDs in the same format. | Bounded, auditable agent |
+| **4. Purpose-scoped verdicts** | Software testing passes; ML uses fail on utility. Same file, different answers per use. | No single misleading score |
+| **5. Passport and tamper test** | Approve the passport, then in *Tamper test* change one cell: verification fails with `DATASET_HASH_MISMATCH`. | Cryptographic binding |
+| **6. Loader guard** | `synpassport.load_dataset(path, purpose=...)` refuses the modified file before any training starts. | Enforcement in code |
 
-> **Presentation Note**: If live agent synthesis is impacted by network or model provider latency, enable deterministic replay mode with `SYNPASSPORT_REPLAY=1`.
+> **Presentation Note**: Run each demo once live before presenting. Then, if the network or LLM is slow, set `SYNPASSPORT_REPLAY=1` and the same runs are served from `replay/`. Without an LLM key the rule-based planner still makes whitelisted repairs.
 
 ---
 
 ## Development & Testing
 
 ```bash
-# Run unit, property, and integration tests (112 tests)
+# Run unit, property, and integration tests (143 tests)
 pytest -q
-
-# Run end-to-end replay-mode tests
-pytest -m e2e
 
 # Run code style and linter checks
 python -m ruff check .
@@ -379,9 +429,3 @@ python scripts/run_pipeline.py
    - Does not certify statutory regulatory adherence (e.g., HIPAA, GDPR, DPDP).
    - Does not replace human release approval when required by policy.
    - Evaluates empirical evidence under specified attacks and pre-registered statistical checks; supports audit.
-
----
-
-## License
-
-This project is licensed under the Apache 2.0 License. See `LICENSE` for details.

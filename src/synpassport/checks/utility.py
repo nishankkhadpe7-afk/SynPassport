@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 from synpassport.checks.base import BaseCheck, CheckResult
 from synpassport.checks.bootstrap import compute_bootstrap_ci
+from synpassport.checks.identifiers import comparable_frames, detect_identifier_columns
 from synpassport.checks.subgroups import filter_subgroup
 
 __all__ = ["UtilityTSTRCheck", "SubgroupUtilityCheck"]
@@ -25,7 +26,12 @@ def _prepare_matrices(
     target_col: str,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Extract and standardize feature matrices and target vectors."""
-    feature_cols = [c for c in train_df.columns if c != target_col]
+    # Identifier columns are not features; text datetimes become timestamps.
+    extra_ids = set(detect_identifier_columns(test_df))
+    train_df, (test_df,), _ids = comparable_frames(train_df, test_df)
+    feature_cols = [
+        c for c in train_df.columns if c != target_col and c not in extra_ids and c in test_df
+    ]
 
     # Numeric encoding
     X_train_df = pd.DataFrame(index=train_df.index)

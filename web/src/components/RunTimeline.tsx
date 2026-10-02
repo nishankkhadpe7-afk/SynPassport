@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { RunStatus, AgentEvent, BudgetUsed } from "@/types";
+import { StateBadge } from "./StateBadge";
+import { Card, EmptyState, Meter, Notice, PageHeader, SkeletonBlock, cx } from "./ui";
 
 interface RunTimelineProps {
   runId: string;
@@ -12,373 +14,285 @@ interface RunTimelineProps {
   error?: string | null;
 }
 
+const EVENT_LABELS: Record<string, string> = {
+  status: "Status",
+  step: "Step",
+  plan: "Plan",
+  candidate: "Candidate generated",
+  generate: "Candidate generated",
+  evaluation: "Evaluation",
+  evaluate: "Evaluation",
+  checks: "Checks",
+  check: "Check",
+  decision: "Agent decision",
+  repair: "Repair applied",
+  rejection: "Agent proposal rejected",
+  agent_rejection: "Agent proposal rejected",
+  finalized: "Finalized",
+  finalize: "Finalized",
+  completed: "Run completed",
+  failed: "Run failed",
+  approved: "Release approved",
+};
+
+// Marker colour carries the event's meaning; the label always says it in words too.
+function markerTone(type: string): string {
+  switch (type.toLowerCase()) {
+    case "repair":
+      return "bg-warn";
+    case "rejection":
+    case "agent_rejection":
+    case "failed":
+      return "bg-fail";
+    case "completed":
+    case "finalized":
+    case "finalize":
+    case "approved":
+      return "bg-pass";
+    case "candidate":
+    case "generate":
+    case "decision":
+      return "bg-accent";
+    default:
+      return "bg-line-strong";
+  }
+}
+
+const STATUS_TEXT: Record<string, string> = {
+  QUEUED: "Queued",
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  FAILED: "Failed",
+};
+
+function humanize(type: string): string {
+  return EVENT_LABELS[type.toLowerCase()] || type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+}
+
 export const RunTimeline: React.FC<RunTimelineProps> = ({
   runId,
   runStatus,
   events,
   budgetUsed,
+  isLoading,
   error,
 }) => {
-  const [seconds, setSeconds] = useState<number>(252); // T+00:04:12 initial
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatClock = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `T+00:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const candidatesUsed = budgetUsed?.candidates_evaluated ?? runStatus?.candidates?.length ?? 2;
+  const candidatesUsed = budgetUsed?.candidates_evaluated ?? runStatus?.candidates?.length ?? 0;
   const maxCandidates = budgetUsed?.max_candidates ?? 3;
-  const repairsUsed = budgetUsed?.repairs_attempted ?? runStatus?.repairs?.length ?? 1;
+  const repairsUsed = budgetUsed?.repairs_attempted ?? runStatus?.repairs?.length ?? 0;
   const maxRepairs = budgetUsed?.max_repairs ?? 2;
 
-  const candidatePct = Math.min(100, Math.round((candidatesUsed / maxCandidates) * 100));
-  const repairPct = Math.min(100, Math.round((repairsUsed / maxRepairs) * 100));
-
-  const isCompleted = runStatus?.status === "COMPLETED";
+  const status = runStatus?.status;
+  const statusLabel = status ? STATUS_TEXT[status] || status : "Starting";
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#11151a] p-4 sm:p-5 rounded-lg border border-[#232a33]">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <div className="w-10 h-10 rounded bg-[#17202b] flex items-center justify-center text-[#2dd4bf] shrink-0 border border-[#232a33]">
-            <span className="material-symbols-outlined text-xl">timeline</span>
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-bold text-[#e6eaf0] truncate">
-                Assurance Execution Trace
-              </h1>
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#17202b] text-[#2dd4bf] font-mono text-[10px] uppercase font-bold border border-[#2dd4bf]/25">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2dd4bf] animate-ping" />
-                {isCompleted ? "CERTIFIED · COMPLETE" : "STREAMING · CYCLE 02"}
-              </span>
-            </div>
-            <p className="text-xs font-mono text-[#8b95a3] truncate">
-              Session: <span className="text-[#e6eaf0] font-semibold">{runId || "RUN-202505-8842F"}</span>{" "}
-              · Heart Disease Synth Attestation
-            </p>
-          </div>
-        </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Agent timeline"
+        description={
+          <>
+            Every step the agent took, in order. Run <span className="font-mono text-ink">{runId}</span>
+          </>
+        }
+        meta={
+          <span
+            className={cx(
+              "text-sm font-medium",
+              status === "COMPLETED" ? "text-pass" : status === "FAILED" ? "text-fail" : "text-accent"
+            )}
+            role="status"
+          >
+            {statusLabel}
+            {status === "RUNNING" && <span className="text-ink-3 font-normal"> · streaming live</span>}
+          </span>
+        }
+      />
 
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0a0c0f] border border-[#232a33] font-mono text-xs text-[#859490]">
-            <span className="material-symbols-outlined text-xs text-[#2dd4bf]">timer</span>
-            <span>CLOCK</span>
-            <span className="text-[#e6eaf0] font-semibold">{formatClock(seconds)}</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#17202b] text-[#34d399] border border-[#34d399]/30 font-mono text-xs font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#34d399] animate-pulse" />
-            <span>LIVE INGESTION</span>
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-3.5 rounded bg-[#11151a] border border-[#f87171] text-[#f87171] text-xs font-mono">
-          {error}
-        </div>
+      {(error || runStatus?.error) && (
+        <Notice tone="fail" role="alert" title="The run stopped with an error">
+          <span className="font-mono">{error || runStatus?.error}</span>
+          <span className="block mt-1">Check the API window for details, then start a new run from Setup.</span>
+        </Notice>
       )}
 
-      {/* Main Two-Column Trace & Telemetry */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Trace Stages (8 Cols) */}
-        <div className="lg:col-span-8 flex flex-col gap-4">
-          <div className="relative flex flex-col gap-4 pl-4 sm:pl-6">
-            {/* Continuous Vertical Timeline Rule */}
-            <div className="absolute left-[27px] sm:left-[35px] top-6 bottom-6 w-px bg-[#232a33]" />
-
-            {/* Stage 1: Plan */}
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded bg-[#17202b] text-[#34d399] flex items-center justify-center shrink-0 border border-[#232a33] z-10">
-                <span className="material-symbols-outlined text-lg">schema</span>
-              </div>
-              <div className="flex-1 bg-[#11151a] rounded-lg p-4 border border-[#232a33] hover:border-[#859490] transition-colors">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#17202b] text-[#8b95a3]">
-                      01. Plan
-                    </span>
-                    <h2 className="text-sm font-semibold text-[#e6eaf0]">
-                      Synthesizer Policy Plan Compiled
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="text-[#34d399] font-semibold">DONE</span>
-                    <span className="text-[#859490]">·</span>
-                    <span className="text-[#859490]">14:02:11</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#8b95a3] mb-2 leading-relaxed">
-                  CTGAN initialized with Laplace noise injection mechanism. Baseline parameters locked to deterministic seed.
-                </p>
-                <div className="flex items-center gap-2 font-mono text-xs bg-[#0a0c0f] px-2.5 py-1 rounded border border-[#232a33] inline-flex">
-                  <span className="text-[#859490]">param:</span>
-                  <span className="text-[#2dd4bf] font-medium">epsilon = 0.50</span>
-                  <span className="text-[#859490]">|</span>
-                  <span className="text-[#859490]">dist:</span>
-                  <span className="text-[#e6eaf0]">Laplace(0, 1.414)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 2: Generate Candidate #1 */}
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded bg-[#17202b] text-[#34d399] flex items-center justify-center shrink-0 border border-[#232a33] z-10">
-                <span className="material-symbols-outlined text-lg">cyclone</span>
-              </div>
-              <div className="flex-1 bg-[#11151a] rounded-lg p-4 border border-[#232a33] hover:border-[#859490] transition-colors">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#17202b] text-[#8b95a3]">
-                      02. Generate
-                    </span>
-                    <h2 className="text-sm font-semibold text-[#e6eaf0]">
-                      Candidate #1 Generated
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="text-[#34d399] font-semibold">DONE</span>
-                    <span className="text-[#859490]">·</span>
-                    <span className="text-[#859490]">14:02:45</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#8b95a3] mb-2 leading-relaxed">
-                  Synthetic batch compiled with 1,024 records across 14 clinical dimensions.
-                </p>
-                <div className="flex items-center gap-2 flex-wrap font-mono text-xs">
-                  <span className="bg-[#0a0c0f] px-2 py-0.5 rounded border border-[#232a33] text-[#8b95a3]">
-                    Batch Size: <span className="text-[#e6eaf0] font-semibold">1,024</span>
-                  </span>
-                  <span className="bg-[#0a0c0f] px-2 py-0.5 rounded border border-[#232a33] text-[#8b95a3]">
-                    Digest: <span className="text-[#2dd4bf]">sha256:7bb2…e910</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 3: Checks Completed (FAIL / REPAIR NEEDED) */}
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded bg-[#11151a] text-[#f87171] border border-[#f87171] flex items-center justify-center shrink-0 z-10">
-                <span className="material-symbols-outlined text-lg">gavel</span>
-              </div>
-              <div className="flex-1 bg-[#11151a] rounded-lg p-4 border border-[#f87171]/50">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#17202b] text-[#f87171] font-bold">
-                      03. Checks
-                    </span>
-                    <h2 className="text-sm font-semibold text-[#e6eaf0]">
-                      Candidate #1 Verification Checks Evaluated
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="px-1.5 py-0.2 rounded bg-[#17202b] text-[#f87171] border border-[#f87171] font-bold uppercase text-[10px]">
-                      FAIL / REPAIR
-                    </span>
-                    <span className="text-[#859490]">·</span>
-                    <span className="text-[#859490]">14:03:10</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#8b95a3] mb-2 leading-relaxed">
-                  Subgroup utility CI width exceeded target 0.15 (observed: 0.340) on cohort{" "}
-                  <code className="text-[#2dd4bf] font-mono">age &gt;= 65</code>. Automatic repair
-                  triggered by policy invariant.
-                </p>
-                <div className="p-2.5 rounded bg-[#0a0c0f] border border-[#232a33] font-mono text-xs space-y-1">
-                  <div className="flex justify-between text-[#859490]">
-                    <span>Policy rule breached:</span>
-                    <span className="text-[#f87171]">subgroup_utility_ci_width &lt;= 0.15</span>
-                  </div>
-                  <div className="flex justify-between text-[#859490]">
-                    <span>Observed:</span>
-                    <span className="text-[#f87171] font-bold">0.340 ± 0.035</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 4: Policy Constrained Repair */}
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded bg-[#17202b] text-[#f59e0b] flex items-center justify-center shrink-0 border border-[#232a33] z-10">
-                <span className="material-symbols-outlined text-lg">build</span>
-              </div>
-              <div className="flex-1 bg-[#11151a] rounded-lg p-4 border border-[#232a33] hover:border-[#859490] transition-colors">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#17202b] text-[#f59e0b]">
-                      04. Repair
-                    </span>
-                    <h2 className="text-sm font-semibold text-[#e6eaf0]">
-                      Policy Constrained Repair Applied
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="text-[#34d399] font-semibold">DONE</span>
-                    <span className="text-[#859490]">·</span>
-                    <span className="text-[#859490]">14:03:35</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#8b95a3] mb-2 leading-relaxed">
-                  Resampling &amp; reweighting geriatric subgroup age &gt;= 65. Re-synthesizing
-                  candidate with conditional prior constraints.
-                </p>
-                <div className="flex items-center gap-2 font-mono text-xs text-[#859490]">
-                  <span className="text-[#e6eaf0]">Action:</span>
-                  <span className="text-[#2dd4bf]">resample_subgroup</span>
-                  <span>|</span>
-                  <span className="text-[#e6eaf0]">Target Delta:</span>
-                  <span className="text-[#34d399]">+136 records</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Stage 5: Candidate #2 Generated & Evaluated */}
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded bg-[#17202b] text-[#34d399] flex items-center justify-center shrink-0 border border-[#232a33] z-10">
-                <span className="material-symbols-outlined text-lg">check_circle</span>
-              </div>
-              <div className="flex-1 bg-[#11151a] rounded-lg p-4 border border-[#232a33] hover:border-[#859490] transition-colors">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#17202b] text-[#34d399]">
-                      05. Candidate #2
-                    </span>
-                    <h2 className="text-sm font-semibold text-[#e6eaf0]">
-                      Candidate #2 Evaluated
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-xs">
-                    <span className="text-[#34d399] font-semibold">CERTIFIED</span>
-                    <span className="text-[#859490]">·</span>
-                    <span className="text-[#859490]">14:04:02</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#8b95a3] leading-relaxed">
-                  Candidate #2 satisfies all software testing and prototyping gates. Clinical ML
-                  bounded by sufficiency warning. Ready for evidence notary.
-                </p>
-              </div>
-            </div>
+      {/* Budgets enforced in code */}
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Card as="div">
+          <div className="flex items-baseline justify-between mb-3">
+            <span className="text-sm text-ink-2">Candidates generated</span>
+            <span className="text-lg font-semibold tabular-nums text-ink">
+              {candidatesUsed} <span className="text-sm font-normal text-ink-3">of {maxCandidates}</span>
+            </span>
           </div>
-        </div>
-
-        {/* Right Column: Telemetry & Envelope (4 Cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-5">
-          {/* Budget & Envelope */}
-          <div className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232a33]">
-              <span className="text-xs font-mono font-bold uppercase text-[#e6eaf0]">
-                Budget &amp; Enclave Envelope
-              </span>
-              <span className="text-[10px] font-mono text-[#34d399] uppercase">Within Limits</span>
-            </div>
-
-            {/* Candidate Generations Meter */}
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between text-[#8b95a3]">
-                <span>Candidates Evaluated</span>
-                <span className="text-[#e6eaf0] font-bold">
-                  {candidatesUsed} / {maxCandidates}
-                </span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-[#0a0c0f] border border-[#232a33] overflow-hidden">
-                <div
-                  className="h-full bg-[#2dd4bf] transition-all"
-                  style={{ width: `${candidatePct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Repairs Attempted Meter */}
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between text-[#8b95a3]">
-                <span>Repair Cycles</span>
-                <span className="text-[#e6eaf0] font-bold">
-                  {repairsUsed} / {maxRepairs}
-                </span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-[#0a0c0f] border border-[#232a33] overflow-hidden">
-                <div
-                  className="h-full bg-[#f59e0b] transition-all"
-                  style={{ width: `${repairPct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Hardware Memory Envelope */}
-            <div className="space-y-1.5 font-mono text-xs">
-              <div className="flex justify-between text-[#8b95a3]">
-                <span>Memory Enclave (Nitro)</span>
-                <span className="text-[#e6eaf0] font-bold">1.4 GB / 4.0 GB</span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-[#0a0c0f] border border-[#232a33] overflow-hidden">
-                <div className="h-full bg-[#34d399] transition-all" style={{ width: "35%" }} />
-              </div>
-            </div>
+          <Meter
+            value={candidatesUsed}
+            max={maxCandidates}
+            tone={candidatesUsed >= maxCandidates ? "warn" : "accent"}
+            label="Candidate budget used"
+          />
+          <p className="mt-3 text-sm text-ink-3">
+            {candidatesUsed >= maxCandidates ? "Budget used up." : "Hard cap enforced by the policy, not the agent."}
+          </p>
+        </Card>
+        <Card as="div">
+          <div className="flex items-baseline justify-between mb-3">
+            <span className="text-sm text-ink-2">Repairs attempted</span>
+            <span className="text-lg font-semibold tabular-nums text-ink">
+              {repairsUsed} <span className="text-sm font-normal text-ink-3">of {maxRepairs}</span>
+            </span>
           </div>
-
-          {/* Real-Time Agent Events Stream */}
-          <div className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-3">
-            <div className="flex items-center justify-between pb-2 border-b border-[#232a33]">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#2dd4bf] animate-ping" />
-                <span className="text-xs font-mono font-bold uppercase text-[#e6eaf0]">
-                  Live Telemetry Feed
-                </span>
-              </div>
-              <span className="text-[10px] font-mono text-[#859490]">ZERO_LLM</span>
-            </div>
-
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 font-mono text-xs">
-              {events.length > 0 ? (
-                events.map((ev, i) => (
-                  <div
-                    key={i}
-                    className="p-2 rounded bg-[#0a0c0f] border border-[#232a33] text-[11px] space-y-0.5"
-                  >
-                    <div className="flex justify-between text-[#859490]">
-                      <span className="text-[#2dd4bf] font-bold uppercase">{ev.type}</span>
-                      <span>{ev.timestamp ? ev.timestamp.slice(11, 19) : "14:04:10"}</span>
-                    </div>
-                    <div className="text-[#8b95a3] truncate">
-                      {JSON.stringify(ev.data).slice(0, 70)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                [
-                  { type: "PLAN_LOCK", time: "14:02:11", msg: "Policy parameters locked to seed 42891" },
-                  { type: "BATCH_GEN", time: "14:02:45", msg: "Batch 1,024 records materialized" },
-                  { type: "GATE_FAIL", time: "14:03:10", msg: "CI width threshold breached on age>=65" },
-                  { type: "REPAIR_APPLY", time: "14:03:35", msg: "Reweighting priors for cohort balance" },
-                  { type: "BATCH_GEN_2", time: "14:04:02", msg: "Candidate #2 generated with N=1,024" },
-                  { type: "LEDGER_LOCK", time: "14:04:12", msg: "Merkle root anchored to notary" },
-                ].map((ev, i) => (
-                  <div
-                    key={i}
-                    className="p-2 rounded bg-[#0a0c0f] border border-[#232a33] text-[11px] space-y-0.5"
-                  >
-                    <div className="flex justify-between text-[#859490]">
-                      <span className="text-[#2dd4bf] font-bold uppercase">{ev.type}</span>
-                      <span>{ev.time}</span>
-                    </div>
-                    <div className="text-[#8b95a3] truncate">{ev.msg}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+          <Meter
+            value={repairsUsed}
+            max={maxRepairs}
+            tone={repairsUsed >= maxRepairs ? "fail" : "warn"}
+            label="Repair budget used"
+          />
+          <p className="mt-3 text-sm text-ink-3">
+            {repairsUsed >= maxRepairs ? "No repairs left." : "Only whitelisted repairs are allowed."}
+          </p>
+        </Card>
       </div>
+
+      {runStatus?.agent_rejections && runStatus.agent_rejections.length > 0 && (
+        <Card
+          title={`${runStatus.agent_rejections.length} agent ${
+            runStatus.agent_rejections.length === 1 ? "proposal" : "proposals"
+          } rejected`}
+          description="The policy blocked these actions. Thresholds and the whitelist cannot be changed by the agent."
+        >
+          <ul className="divide-y divide-line">
+            {runStatus.agent_rejections.map((rej, idx) => (
+              <li key={idx} className="py-3 first:pt-0 last:pb-0 space-y-1">
+                <p className="text-base font-medium text-ink font-mono">{rej.proposal}</p>
+                <p className="text-sm text-ink-2">{rej.reason}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <Card title="Events">
+        {events.length === 0 ? (
+          isLoading || status === "RUNNING" || status === "QUEUED" ? (
+            <SkeletonBlock lines={4} label="Waiting for the first agent event" />
+          ) : (
+            <EmptyState
+              title="No events yet"
+              description="Events stream in here as soon as a run starts. Start one from Setup."
+            />
+          )
+        ) : (
+          <ol className="relative space-y-0">
+            {events.map((ev, index) => {
+              const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : `Step ${index + 1}`;
+              const rawStatus = ev.data?.status ? String(ev.data.status) : "";
+              const message =
+                ev.data?.message || ev.data?.plan || ev.data?.diagnosis || (rawStatus ? STATUS_TEXT[rawStatus] || rawStatus : "");
+              const isLast = index === events.length - 1;
+              return (
+                <li key={index} className="relative grid grid-cols-[20px_minmax(0,1fr)] gap-4 pb-6 last:pb-0">
+                  <div className="relative flex justify-center">
+                    <span className={cx("mt-2 w-2.5 h-2.5 rounded-full z-10", markerTone(ev.type))} aria-hidden="true" />
+                    {!isLast && <span className="absolute top-5 bottom-[-8px] w-px bg-line" aria-hidden="true" />}
+                  </div>
+
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <p className="text-base font-medium text-ink">
+                        {humanize(ev.type)}
+                        {Boolean(ev.data?.candidate_id) && (
+                          <span className="ml-2 font-mono text-sm font-normal text-ink-2">
+                            {String(ev.data.candidate_id)}
+                          </span>
+                        )}
+                      </p>
+                      <time className="text-sm text-ink-3 tabular-nums">{time}</time>
+                    </div>
+
+                    {Boolean(ev.data?.generator) && (
+                      <p className="text-sm text-ink-2">
+                        Generator <span className="font-mono text-ink">{String(ev.data.generator)}</span>
+                        {Boolean(ev.data?.requested_generator) &&
+                          ev.data.requested_generator !== ev.data.generator && (
+                            <span className="text-warn">
+                              {" "}
+                              (requested <span className="font-mono">{String(ev.data.requested_generator)}</span>)
+                            </span>
+                          )}
+                      </p>
+                    )}
+
+                    {Boolean(ev.data?.note) && !ev.data?.action && (
+                      <p className="text-sm text-ink-3 max-w-prose">{String(ev.data.note)}</p>
+                    )}
+
+                    {Boolean(message) && <Reasoning text={String(message)} />}
+
+                    {Boolean(ev.data?.decided_by) && (
+                      <p className="text-sm text-ink-2">
+                        Decided by <span className="text-ink">{String(ev.data.decided_by)}</span>
+                        {Boolean(ev.data?.decision) && (
+                          <>
+                            {" · "}
+                            <span className="font-mono text-ink">{String(ev.data.decision)}</span>
+                          </>
+                        )}
+                      </p>
+                    )}
+
+                    {Boolean(ev.data?.verdicts && typeof ev.data.verdicts === "object") && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-2">
+                        {Object.entries(ev.data.verdicts as Record<string, string>).map(([use, state]) => (
+                          <span key={use} className="inline-flex items-center gap-2 text-sm text-ink-2">
+                            <span className="font-mono">{use}</span>
+                            <StateBadge state={state} size="sm" />
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {Boolean(ev.data?.action) && (
+                      <div className="rounded bg-surface-2 px-3 py-2 text-sm">
+                        <span className="text-ink-2">Repair </span>
+                        <span className="font-mono text-ink">{String(ev.data.action)}</span>
+                        {Boolean(ev.data.params) && Object.keys(ev.data.params as object).length > 0 && (
+                          <span className="block font-mono text-ink-3 break-all">{JSON.stringify(ev.data.params)}</span>
+                        )}
+                        {Boolean(ev.data.note) && <span className="block text-ink-2 mt-1">{String(ev.data.note)}</span>}
+                      </div>
+                    )}
+
+                    {Boolean(ev.data?.reason) && !ev.data?.action && (
+                      <p className="text-sm text-fail">{String(ev.data.reason)}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+/** Long agent reasoning is clamped to three lines with a toggle to read all of it. */
+const Reasoning: React.FC<{ text: string }> = ({ text }) => {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 260;
+  return (
+    <div className="max-w-prose space-y-1">
+      <p className={cx("text-sm text-ink-2", long && !open && "line-clamp-3")}>{text}</p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="text-sm text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent rounded-sm"
+        >
+          {open ? "Show less" : "Show full reasoning"}
+        </button>
+      )}
     </div>
   );
 };

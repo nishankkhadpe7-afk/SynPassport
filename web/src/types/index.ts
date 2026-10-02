@@ -25,7 +25,40 @@ export interface RunStatus {
   agent_rejections: Array<{ proposal: string; reason: string }>;
   budget_used: BudgetUsed;
   verdicts: Record<string, VerdictState>;
+  best_candidate_id?: string | null;
   error?: string | null;
+}
+
+export interface DcrBin {
+  low: number;
+  high: number;
+  to_training: number;
+  to_holdout: number;
+}
+
+export interface DcrResult {
+  candidate: string;
+  sample_size: number;
+  seed: number;
+  bins: DcrBin[];
+  p5_to_training: number;
+  p5_to_holdout: number;
+  median_to_training: number;
+  median_to_holdout: number;
+  share_closer_to_training: number;
+  exact_copies_of_training: number;
+}
+
+export interface PolicySummary {
+  id: string;
+  version: number;
+  name: string;
+  description: string;
+  sha256: string;
+  uses: Record<string, string[]>;
+  requires: Record<string, unknown>;
+  budget: { max_candidates?: number; max_repairs?: number };
+  human_approval?: string;
 }
 
 export interface EvidenceItem {

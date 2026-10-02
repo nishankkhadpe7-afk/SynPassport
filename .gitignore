@@ -41,6 +41,8 @@ keys/
 *.key
 .env
 .env.local
+.env.*.local
+!.env.example
 
 # Data and SQLite
 data/
@@ -52,6 +54,17 @@ data/
 web/node_modules/
 web/.next/
 web/out/
+*.tsbuildinfo
+npm-debug.log*
+
+# Local run artefacts (each run writes signed passports here)
+replay/*.json
+!replay/.gitkeep
+*.log
+
+# AI coding-tool workspaces (contain full copies of the repo)
+.kilo/
+.claude/
 
 # IDE / OS
 .vscode/

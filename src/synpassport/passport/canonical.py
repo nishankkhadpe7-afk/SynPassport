@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "find_noncanonical_floats",
     "canonical_json_dumps",
     "canonical_hash",
     "hash_canonical_csv",
@@ -30,7 +31,11 @@ def normalize_for_canonical(obj: Any, float_precision: int = 6) -> Any:
         if math.isnan(obj) or math.isinf(obj):
             raise ValueError("Cannot canonicalize NaN or infinite float values")
         rounded = round(obj, float_precision)
-        return 0.0 if rounded == 0.0 else rounded
+        # Integral floats are emitted as integers so that serializers which do not
+        # distinguish 1.0 from 1 (e.g. JavaScript JSON.stringify) produce identical bytes.
+        if rounded.is_integer():
+            return int(rounded)
+        return rounded
     if isinstance(obj, Enum):
         return str(obj.value)
     if isinstance(obj, str) or obj is None:
@@ -99,3 +104,26 @@ def hash_canonical_csv(source: str | Path | bytes) -> str:
 
     canonical_content = "\n".join(normalized_lines) + "\n"
     return hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()
+
+
+def find_noncanonical_floats(obj: Any, float_precision: int = 6, path: str = "$") -> list[str]:
+    """Return JSON paths of floats that carry more precision than the canonical form.
+
+    The signature covers rounded values, so any extra precision in a stored document is
+    unsigned data. Verifiers reject such documents to prevent silent value edits.
+    """
+    found: list[str] = []
+    if isinstance(obj, bool):
+        return found
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj) or round(obj, float_precision) != obj:
+            found.append(path)
+        return found
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            found.extend(find_noncanonical_floats(v, float_precision, f"{path}.{k}"))
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            found.extend(find_noncanonical_floats(v, float_precision, f"{path}[{i}]"))
+    return found
+

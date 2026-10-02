@@ -1,0 +1,18 @@
+# Keep the API image small and free of secrets and local state
+.git
+.venv
+.env
+.env.*
+!.env.example
+data
+replay/*.json
+web
+.kilo
+.claude
+.vscode
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+*.egg-info
+examples

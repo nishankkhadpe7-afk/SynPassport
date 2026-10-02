@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Navbar, DashboardTab } from "@/components/Navbar";
-import { SidebarStepper } from "@/components/SidebarStepper";
 import { MissionSetup } from "@/components/MissionSetup";
 import { RunTimeline } from "@/components/RunTimeline";
 import { VerdictBoard } from "@/components/VerdictBoard";
@@ -10,10 +9,12 @@ import { EvidenceDrilldown } from "@/components/EvidenceDrilldown";
 import { SufficiencyPanel } from "@/components/SufficiencyPanel";
 import { PassportPanel } from "@/components/PassportPanel";
 import { TamperDemo } from "@/components/TamperDemo";
+import { Notice } from "@/components/ui";
 import {
   RunStatus,
   AgentEvent,
   BudgetUsed,
+  DcrResult,
   EvidenceItem,
   SufficiencyResponse,
   VerificationResult,
@@ -23,65 +24,24 @@ import {
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("setup");
   const [apiConnected, setApiConnected] = useState<boolean>(false);
-  const [isReplay, setIsReplay] = useState<boolean>(true); // Default to true so deterministic demo always shines
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [isReplay, setIsReplay] = useState<boolean>(false);
   const [apiUrl, setApiUrl] = useState<string>(
-    process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8765"
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   );
   const API_BASE_URL = apiUrl;
 
   // Run execution state
-  const [runId, setRunId] = useState<string | null>("RUN-202505-8842F");
-  const [runStatus, setRunStatus] = useState<RunStatus | null>({
-    run_id: "RUN-202505-8842F",
-    status: "COMPLETED",
-    candidates: [],
-    repairs: [],
-    agent_rejections: [],
-    budget_used: {
-      candidates_evaluated: 2,
-      max_candidates: 3,
-      repairs_attempted: 1,
-      max_repairs: 2,
-    },
-    verdicts: {
-      software_testing: "PASS",
-      ml_prototyping: "WARNING",
-      clinical_ml: "INSUFFICIENT_EVIDENCE",
-    },
-  });
+  const [runId, setRunId] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<RunStatus | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [budgetUsed, setBudgetUsed] = useState<BudgetUsed | null>({
-    candidates_evaluated: 2,
-    max_candidates: 3,
-    repairs_attempted: 1,
-    max_repairs: 2,
-  });
-  const [verdicts, setVerdicts] = useState<Record<string, VerdictState>>({
-    software_testing: "PASS",
-    ml_prototyping: "WARNING",
-    clinical_ml: "INSUFFICIENT_EVIDENCE",
-  });
+  const [budgetUsed, setBudgetUsed] = useState<BudgetUsed | null>(null);
+  const [verdicts, setVerdicts] = useState<Record<string, VerdictState>>({});
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
-  const [sufficiency, setSufficiency] = useState<SufficiencyResponse | null>({
-    run_id: "RUN-202505-8842F",
-    current_n: 35,
-    required_min_n: 171,
-    ci_width: 0.34,
-    subgroups: [
-      {
-        subgroup_query: "age >= 65",
-        current_n: 35,
-        required_min_n: 171,
-        projected_ci_width: 0.34,
-        target_ci_width: 0.15,
-        state: "INSUFFICIENT_EVIDENCE",
-        reason: "Subgroup 'age >= 65' has N=35 < required 171 for target CI width 0.15.",
-      },
-    ],
-  });
+  const [sufficiency, setSufficiency] = useState<SufficiencyResponse | null>(null);
   const [passport, setPassport] = useState<Record<string, unknown> | null>(null);
   const [candidateCsv, setCandidateCsv] = useState<string>("");
+  const [dcr, setDcr] = useState<DcrResult | null>(null);
+  const [policyUses, setPolicyUses] = useState<Record<string, string[]> | null>(null);
 
   // Action status states
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -96,11 +56,16 @@ export default function DashboardPage() {
 
   // Check API health and replay mode with multi-URL fallback
   const checkHealth = useCallback(async () => {
-    const candidateUrls = [
-      apiUrl,
-      "http://127.0.0.1:8765",
-      "http://localhost:8765",
-    ];
+    // Configured URL first, then the docker-compose default (8000) and the local dev port (8765)
+    const candidateUrls = Array.from(
+      new Set([
+        apiUrl,
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8765",
+        "http://localhost:8765",
+      ])
+    );
 
     for (const testUrl of candidateUrls) {
       try {
@@ -113,12 +78,17 @@ export default function DashboardPage() {
             const configRes = await fetch(`${testUrl}/config`, { mode: "cors" });
             if (configRes.ok) {
               const cfg = await configRes.json();
-              if (cfg.replay_mode !== undefined) {
-                setIsReplay(Boolean(cfg.replay_mode));
-              }
+              setIsReplay(Boolean(cfg.replay_mode));
             }
           } catch {
             // ignore
+          }
+
+          if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get("replay") === "1") {
+              setIsReplay(true);
+            }
           }
           return;
         }
@@ -131,29 +101,49 @@ export default function DashboardPage() {
 
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 6000);
+    const interval = setInterval(checkHealth, 5000);
     return () => clearInterval(interval);
   }, [checkHealth]);
 
   // Fetch all artifacts for a run
   const fetchRunArtifacts = useCallback(async (id: string) => {
     try {
+      // 1. Evidence
       const evRes = await fetch(`${API_BASE_URL}/runs/${id}/evidence`);
       if (evRes.ok) {
         const evData: EvidenceItem[] = await evRes.json();
         setEvidence(evData);
       }
 
+      // 2. Sufficiency
       const suffRes = await fetch(`${API_BASE_URL}/runs/${id}/sufficiency`);
       if (suffRes.ok) {
         const suffData: SufficiencyResponse = await suffRes.json();
         setSufficiency(suffData);
       }
 
+      // 3. Passport
       const passRes = await fetch(`${API_BASE_URL}/runs/${id}/passport`);
       if (passRes.ok) {
         const passData = await passRes.json();
         setPassport(passData);
+
+        // The policy the passport was judged against, for each use's required checks
+        const polId = passData?.policy?.id;
+        if (polId) {
+          const polRes = await fetch(`${API_BASE_URL}/policies/${encodeURIComponent(polId)}`);
+          setPolicyUses(polRes.ok ? (await polRes.json()).uses : null);
+        }
+
+        // 4. The exact synthetic file the passport is bound to (used by the tamper test)
+        const dataRes = await fetch(`${API_BASE_URL}/runs/${id}/dataset`);
+        if (dataRes.ok) {
+          setCandidateCsv(await dataRes.text());
+        }
+
+        // 5. Distance-to-closest-record distributions computed from this run's files
+        const dcrRes = await fetch(`${API_BASE_URL}/runs/${id}/dcr`);
+        setDcr(dcrRes.ok ? ((await dcrRes.json()) as DcrResult) : null);
       }
     } catch (err) {
       console.warn("Artifact fetch error:", err);
@@ -183,7 +173,7 @@ export default function DashboardPage() {
         console.warn("Poll run error:", err);
       }
     },
-    [API_BASE_URL, fetchRunArtifacts]
+    [fetchRunArtifacts]
   );
 
   // Subscribe to SSE events
@@ -193,46 +183,44 @@ export default function DashboardPage() {
         eventSourceRef.current.close();
       }
 
-      try {
-        const sse = new EventSource(`${API_BASE_URL}/runs/${id}/events`);
-        eventSourceRef.current = sse;
+      const sse = new EventSource(`${API_BASE_URL}/runs/${id}/events`);
+      eventSourceRef.current = sse;
 
-        sse.onmessage = (messageEvent) => {
-          try {
-            if (messageEvent.data.startsWith(":")) return;
-            const parsed = JSON.parse(messageEvent.data);
-            setEvents((prev) => [...prev, parsed]);
+      sse.onmessage = (messageEvent) => {
+        try {
+          if (messageEvent.data.startsWith(":")) return; // ping
+          const parsed = JSON.parse(messageEvent.data);
+          setEvents((prev) => [...prev, parsed]);
 
-            if (parsed.type === "candidate") {
-              const data = parsed.data || {};
-              if (data.csv_content) {
-                setCandidateCsv(data.csv_content);
-              }
+          if (parsed.type === "candidate") {
+            const data = parsed.data || {};
+            if (data.csv_content) {
+              setCandidateCsv(data.csv_content);
             }
-
-            if (parsed.type === "evaluate" && parsed.data?.verdicts) {
-              setVerdicts(parsed.data.verdicts);
-            }
-
-            if (parsed.type === "completed" || parsed.type === "failed") {
-              pollRun(id);
-              fetchRunArtifacts(id);
-            }
-          } catch {
-            // ignore non-json messages
           }
-        };
 
-        sse.onerror = () => {
-          sse.close();
-        };
-      } catch {
-        // SSE not supported or network error
-      }
+          if (parsed.type === "evaluate" && parsed.data?.verdicts) {
+            setVerdicts(parsed.data.verdicts);
+          }
+
+          if (parsed.type === "completed" || parsed.type === "failed") {
+            pollRun(id);
+            fetchRunArtifacts(id);
+          }
+        } catch {
+          // ignore non-json messages
+        }
+      };
+
+      sse.onerror = () => {
+        // SSE disconnected, fallback to polling
+        sse.close();
+      };
     },
-    [API_BASE_URL, fetchRunArtifacts, pollRun]
+    [fetchRunArtifacts, pollRun]
   );
 
+  // Clean up SSE and polling on unmount
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) eventSourceRef.current.close();
@@ -240,7 +228,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Start new run
+  // Handle starting a new run
   const handleStartRun = async (
     datasetFile: File | null,
     datasetText: string,
@@ -248,6 +236,16 @@ export default function DashboardPage() {
   ) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setEvents([]);
+    setVerdicts({});
+    setEvidence([]);
+    setSufficiency(null);
+    setPassport(null);
+    setDcr(null);
+    setPolicyUses(null);
+    setCandidateCsv("");
+    setRunStatus(null);
+    setVerificationResult(null);
 
     try {
       const formData = new FormData();
@@ -273,31 +271,44 @@ export default function DashboardPage() {
       const newRunId = created.run_id;
       setRunId(newRunId);
 
+      // Start SSE stream and polling
       subscribeToEvents(newRunId);
       pollRun(newRunId);
       pollIntervalRef.current = setInterval(() => pollRun(newRunId), 2000);
 
+      // Switch to timeline tab
       setActiveTab("timeline");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Run failed to start on backend";
-      // Even if backend is not running, transition gracefully so user can explore the UI
-      console.warn("Backend error, proceeding in offline interactive mode:", msg);
-      setActiveTab("timeline");
+      const msg = err instanceof Error ? err.message : "Failed to start run";
+      setErrorMessage(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Human approval
+  // Handle human release approval
   const handleApprove = async (approver: string) => {
     if (!runId) return;
     setIsApproving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/runs/${runId}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approver }),
-      });
+      const sendApproval = (token?: string) =>
+        fetch(`${API_BASE_URL}/runs/${runId}/approve`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "X-Approver-Token": token } : {}),
+          },
+          body: JSON.stringify({ approver }),
+        });
+
+      let res = await sendApproval();
+      // Server has SYNPASSPORT_APPROVER_TOKEN set: ask the approver for it once.
+      if (res.status === 401 && typeof window !== "undefined") {
+        const token = window.prompt("Enter the approver token configured on the API server");
+        if (token) {
+          res = await sendApproval(token);
+        }
+      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -309,44 +320,57 @@ export default function DashboardPage() {
         setPassport(approvalData.passport);
       }
     } catch (err: unknown) {
-      console.warn("Backend approval failed:", err);
+      const msg = err instanceof Error ? err.message : "Approval request failed";
+      setErrorMessage(msg);
     } finally {
       setIsApproving(false);
     }
   };
 
-  // Passport verify
+  // Handle passport verification
+  // Pick the purpose to verify from the passport itself instead of a hardcoded value:
+  // the mission purpose if it has a verdict, else the first declared intended use that does.
+  const resolveVerifyPurpose = (doc: Record<string, unknown>): string => {
+    const verdictMap = (doc.verdicts ?? {}) as Record<string, unknown>;
+    const mission = (doc.mission ?? {}) as Record<string, unknown>;
+    const candidates = [
+      mission.purpose,
+      ...(Array.isArray(mission.intended_uses) ? mission.intended_uses : []),
+    ].filter((p): p is string => typeof p === "string");
+    const match = candidates.find((p) => p in verdictMap);
+    return match ?? Object.keys(verdictMap)[0] ?? "software_testing";
+  };
+
   const handleVerify = async () => {
+    if (!passport) return;
     setIsVerifying(true);
     try {
       const res = await fetch(`${API_BASE_URL}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Send run_id so the server reads the original signed files directly from disk,
+          // avoiding float precision mutation through JS JSON round-trip.
           run_id: runId,
           passport,
           dataset_content: candidateCsv || "age,target\n55,0\n67,1",
-          purpose: "software_testing",
+          purpose: resolveVerifyPurpose(passport),
           allow_warning: true,
         }),
       });
 
-      if (res.ok) {
-        const data: VerificationResult = await res.json();
-        setVerificationResult(data);
-      } else {
-        setVerificationResult({
-          valid: true,
-          reason_code: "ED25519_VALIDATED",
-          description: "Ed25519 cryptographic signature matches hardware notary public key.",
-        });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Verification failed");
       }
-    } catch {
-      // Deterministic fallback demonstration
+
+      const data: VerificationResult = await res.json();
+      setVerificationResult(data);
+    } catch (err: unknown) {
       setVerificationResult({
-        valid: true,
-        reason_code: "ED25519_VALIDATED",
-        description: "Ed25519 signature valid against key_ed25519_notary_08b. Zero tampering detected.",
+        valid: false,
+        reason_code: "VERIFICATION_ERROR",
+        description: err instanceof Error ? err.message : "Unable to verify passport",
       });
     } finally {
       setIsVerifying(false);
@@ -373,18 +397,20 @@ export default function DashboardPage() {
       });
 
       if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
         return {
           valid: false,
-          reason_code: "DATASET_HASH_MISMATCH",
-          description: "Computed payload hash diverges from canonical signed digest.",
+          reason_code: "VERIFICATION_FAILED",
+          description: errData.detail || "Verification rejected by server",
         };
       }
+
       return await res.json();
-    } catch {
+    } catch (err: unknown) {
       return {
         valid: false,
-        reason_code: "DATASET_HASH_MISMATCH",
-        description: "Computed payload hash diverges from canonical signed digest.",
+        reason_code: "NETWORK_ERROR",
+        description: err instanceof Error ? err.message : "Network error during verification",
       };
     } finally {
       setIsVerifying(false);
@@ -392,108 +418,101 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0c0f] text-[#e6eaf0] flex flex-col font-sans">
-      {/* Fixed Top Header */}
+    <div className="min-h-screen bg-bg flex flex-col">
+      {/* Top Navbar with tabs & replay indicator */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         isReplay={isReplay}
-        setIsReplay={setIsReplay}
         apiConnected={apiConnected}
         runId={runId}
         runStatus={runStatus?.status || null}
-        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       />
 
-      {/* Persistent Left Sidebar Stepper */}
-      <SidebarStepper
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        runId={runId}
-        isOpenMobile={isMobileMenuOpen}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
-      />
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-page w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        {/* Error message alert */}
+        {errorMessage && (
+          <div className="mb-8">
+            <Notice tone="fail" role="alert" title="Something went wrong" onDismiss={() => setErrorMessage(null)}>
+              <span className="font-mono">{errorMessage}</span>
+              <span className="block mt-1">
+                {apiConnected
+                  ? "Check the inputs and try again. Details are in the API window."
+                  : "The API is not reachable. Start it on port 8765, then try again."}
+              </span>
+            </Notice>
+          </div>
+        )}
 
-      {/* Main Content Area (offset by 72 (18rem) on desktop and top 16 (4rem)) */}
-      <div className="pl-0 lg:pl-72 pt-16 min-h-screen flex flex-col">
-        <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6 max-w-[1600px] mx-auto">
-          {errorMessage && (
-            <div className="mb-6 p-4 rounded bg-[#11151a] border border-[#f87171] text-[#f87171] text-xs font-mono flex items-center justify-between">
-              <span>{errorMessage}</span>
-              <button
-                onClick={() => setErrorMessage(null)}
-                className="text-[#859490] hover:text-[#e6eaf0] font-bold"
-              >
-                &times;
-              </button>
-            </div>
-          )}
+        {/* Tab 1: Mission Setup */}
+        {activeTab === "setup" && (
+          <MissionSetup onStartRun={handleStartRun} isLoading={isLoading} apiBaseUrl={API_BASE_URL} />
+        )}
 
-          {/* Stage 01: Mission Setup */}
-          {activeTab === "setup" && (
-            <MissionSetup onStartRun={handleStartRun} isLoading={isLoading} />
-          )}
+        {/* Tab 2: Agent Timeline */}
+        {activeTab === "timeline" && (
+          <RunTimeline
+            runId={runId || "pending"}
+            runStatus={runStatus}
+            events={events}
+            budgetUsed={budgetUsed}
+            isLoading={isLoading}
+            error={errorMessage}
+          />
+        )}
 
-          {/* Stage 02: Run View / Execution Trace */}
-          {activeTab === "timeline" && (
-            <RunTimeline
-              runId={runId || "RUN-202505-8842F"}
-              runStatus={runStatus}
-              events={events}
-              budgetUsed={budgetUsed}
-              isLoading={isLoading}
-              error={errorMessage}
-            />
-          )}
+        {/* Tab 3: Verdict Board */}
+        {activeTab === "verdicts" && (
+          <VerdictBoard verdicts={verdicts} isLoading={isLoading} evidence={evidence} policyUses={policyUses} />
+        )}
 
-          {/* Stage 03: Verdicts */}
-          {activeTab === "verdicts" && (
-            <VerdictBoard verdicts={verdicts} isLoading={isLoading} />
-          )}
+        {/* Tab 4: Evidence Drill-Down */}
+        {activeTab === "evidence" && (
+          <EvidenceDrilldown
+            evidence={evidence}
+            isLoading={isLoading}
+            candidateId={runStatus?.best_candidate_id ?? null}
+            dcr={dcr}
+          />
+        )}
 
-          {/* Stage 04: Evidence Drilldown */}
-          {activeTab === "evidence" && (
-            <EvidenceDrilldown evidence={evidence} isLoading={isLoading} />
-          )}
+        {/* Tab 5: Sufficiency Panel */}
+        {activeTab === "sufficiency" && (
+          <SufficiencyPanel sufficiency={sufficiency} isLoading={isLoading} />
+        )}
 
-          {/* Stage 05: Sufficiency Panel */}
-          {activeTab === "sufficiency" && (
-            <SufficiencyPanel sufficiency={sufficiency} isLoading={isLoading} />
-          )}
+        {/* Tab 6: Passport Panel */}
+        {activeTab === "passport" && (
+          <PassportPanel
+            runId={runId || ""}
+            passport={passport}
+            onApprove={handleApprove}
+            onVerify={handleVerify}
+            verificationResult={verificationResult}
+            isApproving={isApproving}
+            isVerifying={isVerifying}
+            isLoading={isLoading}
+          />
+        )}
 
-          {/* Stage 06: Evidence Passport */}
-          {activeTab === "passport" && (
-            <PassportPanel
-              runId={runId || "RUN-202505-8842F"}
-              passport={passport}
-              onApprove={handleApprove}
-              onVerify={handleVerify}
-              verificationResult={verificationResult}
-              isApproving={isApproving}
-              isVerifying={isVerifying}
-              isLoading={isLoading}
-            />
-          )}
+        {/* Tab 7: Tamper Demo */}
+        {activeTab === "tamper" && (
+          <TamperDemo
+            passport={passport}
+            candidateCsv={candidateCsv}
+            onVerifyCustom={handleVerifyCustom}
+            isVerifying={isVerifying}
+          />
+        )}
+      </main>
 
-          {/* Stage 07: Tamper Demo */}
-          {activeTab === "tamper" && (
-            <TamperDemo
-              passport={passport}
-              candidateCsv={candidateCsv}
-              onVerifyCustom={handleVerifyCustom}
-              isVerifying={isVerifying}
-            />
-          )}
-        </main>
-
-        {/* Flat Terminal Footer */}
-        <footer className="border-t border-[#232a33] bg-[#050f19] py-4 px-6 text-center text-xs text-[#859490] font-mono">
-          <p>
-            SynPassport Cockpit v2.4 &bull; Deterministic Invariant Telemetry &bull; Strictly
-            Zero-LLM Verification
-          </p>
-        </footer>
-      </div>
+      {/* Footer */}
+      <footer className="border-t border-line">
+        <p className="max-w-page mx-auto px-4 sm:px-6 py-6 text-sm text-ink-3">
+          SynPassport issues evidence, not guarantees. Verdicts cover only the checks and attacks listed in each passport.
+        </p>
+      </footer>
     </div>
   );
 }

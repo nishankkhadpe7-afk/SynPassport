@@ -56,6 +56,7 @@ class RunRecord:
             "max_repairs": 2,
         }
         self.verdicts: dict[str, str] = {}
+        self.best_candidate_id: str | None = None
         self.explanation: dict[str, Any] | None = None
         self.passport: dict[str, Any] | None = None
         self.evidence: list[dict[str, Any]] = []
@@ -207,6 +208,7 @@ def execute_run_pipeline(run_id: str) -> None:
             run.repairs = final_bundle.get("repairs", [])
             run.agent_rejections = final_bundle.get("agent_rejections", [])
             run.verdicts = final_bundle.get("verdicts", {})
+            run.best_candidate_id = final_bundle.get("best_candidate_id")
             run.explanation = final_bundle.get("explanation")
             run.passport = final_bundle.get("passport")
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -28,13 +30,52 @@ router = APIRouter(tags=["verify"])
 logger = get_logger("synpassport.api.verify")
 
 
-def _is_safe_path(p: Path) -> bool:
+RUN_ID_PATTERN = re.compile(r"^run_[0-9a-f]{12}$")
+
+
+def _path_inside_runs_dir(raw: Any) -> Path | None:
+    """Resolve a client-supplied server path, accepting it only inside RUNS_DIR."""
     try:
-        resolved = p.resolve()
-        allowed_roots = [RUNS_DIR.resolve(), Path.cwd().resolve(), Path("/tmp").resolve()]
-        return any(resolved.is_relative_to(root) for root in allowed_roots)
-    except Exception:
-        return False
+        candidate = Path(str(raw)).resolve()
+    except (OSError, ValueError):
+        return None
+    runs_root = RUNS_DIR.resolve()
+    if not candidate.is_relative_to(runs_root) or not candidate.is_file():
+        return None
+    return candidate
+
+
+def _run_artifacts(run_id: str) -> tuple[Path | None, Path | None]:
+    """Locate a run's signed passport and the exact dataset file it is bound to."""
+    if not RUN_ID_PATTERN.match(run_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid run_id format",
+        )
+    run_dir = RUNS_DIR / run_id
+    passport_file = run_dir / "passport.json"
+    if not passport_file.is_file():
+        return None, None
+
+    # Use the dataset named inside the passport (the best candidate actually signed),
+    # not simply the most recent candidate file in the directory.
+    try:
+        passport_data = json.loads(passport_file.read_text(encoding="utf-8"))
+        bound_name = Path(str(passport_data.get("dataset", {}).get("name", ""))).name
+    except (OSError, ValueError, AttributeError):
+        bound_name = ""
+    dataset_file = run_dir / bound_name if bound_name else None
+    if dataset_file is None or not dataset_file.is_file():
+        dataset_file = None
+    return passport_file, dataset_file
+
+
+def _check_size(num_bytes: int, label: str) -> None:
+    if num_bytes > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded {label} exceeds max limit of {MAX_UPLOAD_SIZE} bytes",
+        )
 
 
 @router.post(
@@ -49,17 +90,22 @@ async def verify_dataset_passport(
     verify_id = f"verify_{uuid.uuid4().hex[:8]}"
     staging_dir = RUNS_DIR / "staging" / verify_id
     staging_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        return await _verify_impl(request, staging_dir)
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
 
+
+async def _verify_impl(request: Request, staging_dir: Path) -> VerifyResponse:
+    # Text from the client is written as raw UTF-8 bytes, never in text mode: on Windows,
+    # text mode turns "\n" into "\r\n" and the SHA-256 would never match the passport.
     data_file_path: Path | None = None
-    dataset_bytes_buf: bytes | None = None  # preferred: keep bytes in memory
     pass_file_path: Path | None = None
-    passport_data_buf: dict[str, Any] | None = None  # preferred: avoid JSON round-trip
     resolved_purpose: str | None = None
     resolved_allow_warning: bool = False
 
+    # 1. Parse JSON body if Content-Type is application/json
     content_type = request.headers.get("content-type", "")
-
-    # 1. Parse JSON body
     if "application/json" in content_type:
         try:
             body: dict[str, Any] = await request.json()
@@ -68,82 +114,75 @@ async def verify_dataset_passport(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Malformed JSON request body: {exc}",
             ) from exc
+        if not isinstance(body, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="JSON request body must be an object",
+            )
 
         resolved_purpose = body.get("purpose")
         resolved_allow_warning = bool(body.get("allow_warning", False))
 
-        # Preferred: run_id reads directly from signed files on disk
+        # Preferred path: run_id provided — read the signed passport and the dataset it
+        # is bound to directly from disk.
         run_id_val = body.get("run_id")
         if run_id_val:
-            run_dir = RUNS_DIR / str(run_id_val)
-            passport_on_disk = run_dir / "passport.json"
-            candidate_csvs = sorted(run_dir.glob("candidate_*.csv"))
-            dataset_on_disk = candidate_csvs[-1] if candidate_csvs else None
-            if passport_on_disk.is_file():
-                pass_file_path = passport_on_disk
-            if dataset_on_disk and dataset_on_disk.is_file():
-                data_file_path = dataset_on_disk
+            pass_file_path, data_file_path = _run_artifacts(str(run_id_val))
 
+        # Server-side paths are only honoured inside the runs directory.
         if "dataset_path" in body:
-            candidate_p = Path(body["dataset_path"])
-            if not _is_safe_path(candidate_p):
+            safe = _path_inside_runs_dir(body["dataset_path"])
+            if safe is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Access to path outside permitted directories forbidden: {body['dataset_path']}",
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="dataset_path must point to a file inside the runs directory",
                 )
-            if candidate_p.is_file():
-                data_file_path = candidate_p
+            data_file_path = safe
         elif "dataset_content" in body and data_file_path is None:
-            dataset_bytes_buf = str(body["dataset_content"]).encode("utf-8")
+            content = str(body["dataset_content"])
+            _check_size(len(content.encode("utf-8")), "dataset")
+            data_file_path = staging_dir / "dataset.csv"
+            data_file_path.write_bytes(content.encode("utf-8"))
 
         if "passport_path" in body:
-            candidate_p = Path(body["passport_path"])
-            if not _is_safe_path(candidate_p):
+            safe = _path_inside_runs_dir(body["passport_path"])
+            if safe is None:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Access to path outside permitted directories forbidden: {body['passport_path']}",
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="passport_path must point to a file inside the runs directory",
                 )
-            if candidate_p.is_file():
-                pass_file_path = candidate_p
+            pass_file_path = safe
         elif "passport" in body and pass_file_path is None:
             p_val = body["passport"]
-            if isinstance(p_val, dict):
-                # Pass as dict to avoid float-precision loss from double JSON round-trip
-                passport_data_buf = p_val
-            else:
-                pass_file_path = staging_dir / "passport.json"
-                pass_file_path.write_text(str(p_val), encoding="utf-8")
+            p_text = json.dumps(p_val) if isinstance(p_val, dict) else str(p_val)
+            _check_size(len(p_text.encode("utf-8")), "passport")
+            pass_file_path = staging_dir / "passport.json"
+            pass_file_path.write_bytes(p_text.encode("utf-8"))
 
-    # 2. Parse Multipart form fields
+    # 2. Parse Multipart form fields if multipart/form-data
     if "multipart/form-data" in content_type:
         form = await request.form()
 
         d_val = form.get("dataset")
         if isinstance(d_val, UploadFile):
-            d_bytes = await d_val.read()
-            if len(d_bytes) > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"Uploaded dataset exceeds max limit of {MAX_UPLOAD_SIZE} bytes",
-                )
-            # Keep bytes in-memory: avoids disk round-trip that can alter hash
-            dataset_bytes_buf = d_bytes
+            d_bytes = await d_val.read(MAX_UPLOAD_SIZE + 1)
+            _check_size(len(d_bytes), "dataset")
+            data_file_path = staging_dir / "dataset.csv"
+            data_file_path.write_bytes(d_bytes)
         elif isinstance(d_val, str) and d_val.strip():
-            dataset_bytes_buf = d_val.encode("utf-8")
+            _check_size(len(d_val.encode("utf-8")), "dataset")
+            data_file_path = staging_dir / "dataset.csv"
+            data_file_path.write_bytes(d_val.encode("utf-8"))
 
         p_val = form.get("passport")
         if isinstance(p_val, UploadFile):
-            p_bytes = await p_val.read()
-            if len(p_bytes) > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"Uploaded passport exceeds max limit of {MAX_UPLOAD_SIZE} bytes",
-                )
+            p_bytes = await p_val.read(MAX_UPLOAD_SIZE + 1)
+            _check_size(len(p_bytes), "passport")
             pass_file_path = staging_dir / "passport.json"
             pass_file_path.write_bytes(p_bytes)
         elif isinstance(p_val, str) and p_val.strip():
             pass_file_path = staging_dir / "passport.json"
-            pass_file_path.write_text(p_val, encoding="utf-8")
+            pass_file_path.write_bytes(p_val.encode("utf-8"))
 
         if form.get("purpose"):
             resolved_purpose = str(form.get("purpose"))
@@ -155,25 +194,21 @@ async def verify_dataset_passport(
                 "yes",
             )
 
-    has_dataset = data_file_path is not None or dataset_bytes_buf is not None
-    has_passport = pass_file_path is not None or passport_data_buf is not None
-    if not has_dataset or not has_passport or not resolved_purpose:
+    if not data_file_path or not pass_file_path or not resolved_purpose:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Fields \'dataset\', \'passport\', and \'purpose\' are strictly required",
+            detail="Fields 'dataset', 'passport', and 'purpose' are strictly required",
         )
 
-    # Resolve server public key
+    # The server only trusts its own signing key.
     _, server_pub_path = get_or_create_server_key()
 
     result = verify(
         dataset_path=data_file_path,
         passport_path=pass_file_path,
-        purpose=resolved_purpose,
+        purpose=str(resolved_purpose),
         allow_warning=resolved_allow_warning,
         public_key=server_pub_path,
-        dataset_bytes=dataset_bytes_buf,
-        passport_data=passport_data_buf,
     )
 
     log_run_event(

@@ -20,7 +20,9 @@ __all__ = [
     "GeminiLLMClient",
     "GroqLLMClient",
     "MockLLM",
+    "RuleBasedPlanner",
     "create_llm_client",
+    "describe_llm_client",
     "query_llm_structured",
 ]
 
@@ -56,6 +58,7 @@ class GeminiLLMClient(BaseLLMClient):
             ],
             "generationConfig": {
                 "temperature": 0.1,
+                "maxOutputTokens": 600,
                 "responseMimeType": "application/json",
             },
         }
@@ -90,11 +93,18 @@ def create_llm_client(
     """
     import os
 
-    resolved_key = (api_key or os.environ.get("LLM_API_KEY", "")).strip()
+    resolved_key = (
+        api_key
+        or os.environ.get("LLM_API_KEY")
+        or os.environ.get("GROQ_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+        or ""
+    ).strip()
     resolved_model = (model or os.environ.get("LLM_MODEL", "")).strip()
 
     if not resolved_key:
-        return MockLLM()
+        # No key: the agent still repairs, using a fixed, auditable rule set.
+        return RuleBasedPlanner()
 
     # Groq key detection (gsk_ prefix)
     if resolved_key.startswith("gsk_"):
@@ -126,6 +136,8 @@ class GroqLLMClient(BaseLLMClient):
             "model": self.model,
             "messages": messages,
             "temperature": 0.1,
+            # A decision is a short JSON object; the cap stops runaway explanations.
+            "max_tokens": 600,
             "response_format": {"type": "json_object"},
         }
         headers = {
@@ -187,6 +199,7 @@ def query_llm_structured(
     system_prompt: str,
     tool_registry: AgentToolRegistry | None = None,
     max_retries: int = 3,
+    allowed_actions: set[str] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Query LLM with bounded retries on malformed JSON or schema rejections."""
     registry = tool_registry or AgentToolRegistry()
@@ -251,7 +264,92 @@ def query_llm_structured(
             )
             continue
 
+        if allowed_actions is not None and action not in allowed_actions:
+            allowed = ", ".join(sorted(allowed_actions))
+            retry_errors.append(
+                f"Action '{action}' rejected: not permitted in this step (allowed: {allowed})"
+            )
+            current_prompt = (
+                f"{prompt}\n\nERROR: Action '{action}' is not permitted in this step. "
+                f"Choose one of: {allowed}."
+            )
+            continue
+
         # Successfully parsed and validated
         return parsed, retry_errors
 
     return None, retry_errors
+
+
+class RuleBasedPlanner(BaseLLMClient):
+    """Offline planner used when no LLM key is configured or the LLM call fails.
+
+    It never calls a model. The agent loop asks it for a decision directly via
+    :meth:`decide`, which follows a fixed, auditable repair order:
+    switch GaussianCopula -> CTGAN, then double CTGAN's training epochs.
+    """
+
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        return json.dumps(
+            {
+                "thought_summary": "Rule-based planner does not use free-text prompts",
+                "action": "finalize",
+                "args": {"reason": "Rule-based planner"},
+            }
+        )
+
+    @staticmethod
+    def decide(
+        current_generator: str,
+        current_params: dict[str, Any],
+        check_states: dict[str, str] | None = None,
+        regenerating_identifiers: bool = False,
+    ) -> dict[str, Any]:
+        """Return the next whitelisted repair for the current generator settings."""
+        states = check_states or {}
+        if states.get("identifier_leakage") not in (None, "PASS") and not regenerating_identifiers:
+            return {
+                "thought_summary": (
+                    "Real identifiers were copied into the synthetic data. Rule 0: "
+                    "replace identifier columns with fresh values in the same format."
+                ),
+                "action": "propose_repair",
+                "args": {"action": "regenerate_identifiers", "params": {}},
+            }
+        if current_generator != "CTGAN":
+            return {
+                "thought_summary": (
+                    "Candidate missed the policy. Rule 1: switch from GaussianCopula to "
+                    "CTGAN, which can model more complex distributions."
+                ),
+                "action": "propose_repair",
+                "args": {
+                    "action": "switch_generator",
+                    "params": {"target_generator": "CTGAN"},
+                },
+            }
+        epochs = int(current_params.get("epochs", 50))
+        return {
+            "thought_summary": (
+                f"Still missing the policy after switching to CTGAN. Rule 2: train CTGAN longer "
+                f"({epochs} -> {min(500, epochs * 2)} epochs)."
+            ),
+            "action": "propose_repair",
+            "args": {
+                "action": "tune_hyperparameters",
+                "params": {"epochs": min(500, epochs * 2)},
+            },
+        }
+
+
+def describe_llm_client(client: BaseLLMClient) -> str:
+    """Human-readable name of the decision maker, shown on the run timeline."""
+    if isinstance(client, GroqLLMClient):
+        return f"Groq ({client.model})"
+    if isinstance(client, GeminiLLMClient):
+        return f"Gemini ({client.model})"
+    if isinstance(client, RuleBasedPlanner):
+        return "rule-based planner (no LLM key configured)"
+    if isinstance(client, MockLLM):
+        return "mock LLM (tests)"
+    return type(client).__name__

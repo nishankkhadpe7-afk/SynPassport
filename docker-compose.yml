@@ -4,17 +4,20 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      # Same ports as a local run: API on 8765, dashboard on 3005 (change with API_PORT / WEB_PORT)
+      - "${API_PORT:-8765}:8000"
     environment:
-      - DB_PATH=/app/data/synpassport.db
-      - SIGNING_KEY_PATH=/app/keys/ed25519_signing_key.pem
-      - GLOBAL_SEED=1234
+      # Runs, evidence and the server signing keypair live under DATA_DIR (keys in DATA_DIR/keys)
+      - DATA_DIR=/app/data
       - SYNPASSPORT_REPLAY=${SYNPASSPORT_REPLAY:-0}
+      - SYNPASSPORT_APPROVER_TOKEN=${SYNPASSPORT_APPROVER_TOKEN:-}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-gemini-1.5-flash}
+      # Let the dashboard call the API from whichever port it is published on
+      - CORS_ORIGINS=http://localhost:${WEB_PORT:-3005},http://127.0.0.1:${WEB_PORT:-3005}
+      # Empty = provider default (a Groq gsk_ key uses qwen/qwen3.8-27b)
+      - LLM_MODEL=${LLM_MODEL:-}
     volumes:
       - ./data:/app/data
-      - ./keys:/app/keys
       - ./policies:/app/policies
       - ./replay:/app/replay
 
@@ -22,9 +25,10 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are baked into the browser bundle at build time
+        - NEXT_PUBLIC_API_URL=http://localhost:${API_PORT:-8765}
     ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - "${WEB_PORT:-3005}:3000"
     depends_on:
       - api

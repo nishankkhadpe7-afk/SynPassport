@@ -26,6 +26,7 @@ from synpassport.agent.llm import MockLLM, query_llm_structured
 from synpassport.agent.loop import AssuranceAgentLoop
 from synpassport.agent.repairs import validate_repair_action
 from synpassport.agent.tools import AgentToolRegistry
+from synpassport.passport.canonical import hash_dataset_file
 
 
 @pytest.fixture
@@ -63,9 +64,30 @@ def agent_test_data(tmp_path: Path) -> dict[str, Any]:
         "critical_subgroups": ["age >= 65"],
     }
 
+    # Policy whose fidelity bar no candidate can reach, so every run reaches the agent's
+    # diagnose/repair turn regardless of how good the generator is.
+    strict_policy = tmp_path / "unreachable-policy.yaml"
+    strict_policy.write_text(
+        "id: unreachable-test-policy\n"
+        "version: 1\n"
+        "requires:\n"
+        "  schema_validity: pass\n"
+        "  marginal_fidelity:\n"
+        "    min: 1.5\n"
+        "budget:\n"
+        "  max_candidates: 2\n"
+        "  max_repairs: 1\n"
+        "uses:\n"
+        "  software_testing:\n"
+        "    - schema_validity\n"
+        "    - marginal_fidelity\n",
+        encoding="utf-8",
+    )
+
     return {
         "data_csv": data_csv,
         "holdout_csv": holdout_csv,
+        "strict_policy": strict_policy,
         "mission": mission,
         "tmp_path": tmp_path,
     }
@@ -89,7 +111,7 @@ def test_reject_threshold_change(agent_test_data: dict[str, Any]) -> None:
     result = loop.run(
         real_data_path=agent_test_data["data_csv"],
         mission=agent_test_data["mission"],
-        policy_id_or_path="software-testing",
+        policy_id_or_path=agent_test_data["strict_policy"],
         output_dir=agent_test_data["tmp_path"] / "run_threshold",
     )
 
@@ -118,7 +140,7 @@ def test_reject_unknown_tool(agent_test_data: dict[str, Any]) -> None:
     result = loop.run(
         real_data_path=agent_test_data["data_csv"],
         mission=agent_test_data["mission"],
-        policy_id_or_path="software-testing",
+        policy_id_or_path=agent_test_data["strict_policy"],
         output_dir=agent_test_data["tmp_path"] / "run_tool",
     )
 
@@ -169,8 +191,10 @@ def test_reject_non_whitelisted_repair() -> None:
     valid_switch, _ = validate_repair_action("switch_generator", {"target_generator": "CTGAN"})
     assert valid_switch is True
 
-    valid_dp, _ = validate_repair_action("enable_dp_training", {"target_epsilon": 1.0})
-    assert valid_dp is True
+    # No DP generator is bundled, so a DP repair must not be recorded as applied.
+    valid_dp, dp_reason = validate_repair_action("enable_dp_training", {"target_epsilon": 1.0})
+    assert valid_dp is False
+    assert "not supported" in dp_reason
 
 
 def test_malformed_json_retry_and_clean_failure() -> None:
@@ -200,7 +224,7 @@ def test_holdout_isolation_payloads(agent_test_data: dict[str, Any]) -> None:
     loop.run(
         real_data_path=agent_test_data["data_csv"],
         mission=agent_test_data["mission"],
-        policy_id_or_path="software-testing",
+        policy_id_or_path=agent_test_data["strict_policy"],
         holdout_path=agent_test_data["holdout_csv"],
         output_dir=agent_test_data["tmp_path"] / "run_isolation",
     )
@@ -273,10 +297,15 @@ def test_replay_cache_offline(agent_test_data: dict[str, Any], tmp_path: Path) -
         output_dir=tmp_path / "cache_run_1",
     )
 
+    from synpassport.passport.canonical import canonical_hash
+    from synpassport.policy.loader import load_policy
+
+    # The key includes the policy's content hash, so an edited policy never replays.
     key = compute_replay_key(
         mission=agent_test_data["mission"],
-        policy_id="software-testing",
+        policy_id=f"software-testing@{canonical_hash(load_policy('software-testing'))}",
         seed=1234,
+        dataset_sha256=hash_dataset_file(agent_test_data["data_csv"]),
     )
     cache = ReplayCache(cache_dir=cache_dir)
     assert cache.has(key) is True
@@ -297,6 +326,41 @@ def test_replay_cache_offline(agent_test_data: dict[str, Any], tmp_path: Path) -
 
     assert len(fresh_mock_llm.history) == 0  # Zero network / LLM calls!
     assert run_2["best_candidate_id"] == run_1["best_candidate_id"]
+
+    # The replayed candidate file must be the exact bytes the passport is bound to.
+    replay_passport = run_2["passport"]
+    replay_csv = tmp_path / "cache_run_2" / replay_passport["dataset"]["name"]
+    assert hash_dataset_file(replay_csv) == replay_passport["dataset"]["sha256"]
+
+
+def test_replay_cache_not_shared_across_datasets(
+    agent_test_data: dict[str, Any], tmp_path: Path
+) -> None:
+    """A different dataset with the same mission must not receive a cached passport."""
+    cache_dir = tmp_path / "replay_cache"
+    AssuranceAgentLoop(llm_client=MockLLM(), cache_dir=cache_dir).run(
+        real_data_path=agent_test_data["data_csv"],
+        mission=agent_test_data["mission"],
+        policy_id_or_path="software-testing",
+        output_dir=tmp_path / "first",
+    )
+
+    other_csv = tmp_path / "other.csv"
+    other_df = pd.read_csv(agent_test_data["data_csv"])
+    other_df.iloc[::-1].to_csv(other_csv, index=False)
+
+    replay_llm = MockLLM()
+    result = AssuranceAgentLoop(
+        llm_client=replay_llm, cache_dir=cache_dir, replay_mode=True
+    ).run(
+        real_data_path=other_csv,
+        mission=agent_test_data["mission"],
+        policy_id_or_path="software-testing",
+        output_dir=tmp_path / "second",
+    )
+    bound_csv = tmp_path / "second" / result["passport"]["dataset"]["name"]
+    assert hash_dataset_file(bound_csv) == result["passport"]["dataset"]["sha256"]
+    assert (tmp_path / "second" / "train_partition.csv").is_file()  # ran live, not replayed
 
 
 def test_explanation_generator_citations() -> None:

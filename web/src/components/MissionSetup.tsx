@@ -1,37 +1,75 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { PolicySummary } from "@/types";
 import { generateHeartDiseaseSampleCsv } from "@/utils/sampleData";
+import { Button, Card, Field, Mono, PageHeader, Select, inputClass, cx } from "./ui";
 
 interface MissionSetupProps {
   onStartRun: (datasetFile: File | null, datasetText: string, missionJson: string) => Promise<void>;
   isLoading: boolean;
+  apiBaseUrl: string;
 }
 
-export const MissionSetup: React.FC<MissionSetupProps> = ({ onStartRun, isLoading }) => {
+// Only uses a policy actually judges are offered, so every ticked use gets a verdict.
+const USE_OPTIONS: Array<{ id: string; label: string; note: string }> = [
+  { id: "software_testing", label: "Software testing", note: "Fixtures and integration tests" },
+  { id: "ml_prototyping", label: "ML prototyping", note: "Internal model experiments" },
+  { id: "clinical_ml", label: "Clinical ML", note: "High-stakes model training" },
+];
+
+const USE_LABELS: Record<string, string> = Object.fromEntries(USE_OPTIONS.map((u) => [u.id, u.label]));
+
+/** The strictest policy needed for the chosen uses. */
+function policyFor(uses: string[]): string {
+  if (uses.includes("clinical_ml")) return "ml-sensitive-v1";
+  if (uses.includes("ml_prototyping")) return "ml-prototyping";
+  return "software-testing";
+}
+
+function previewRows(text: string, maxRows = 4): { header: string[]; rows: string[][]; total: number } {
+  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  const header = (lines[0] || "").split(",");
+  const rows = lines.slice(1, maxRows + 1).map((l) => l.split(","));
+  return { header, rows, total: Math.max(0, lines.length - 1) };
+}
+
+export const MissionSetup: React.FC<MissionSetupProps> = ({ onStartRun, isLoading, apiBaseUrl }) => {
   const [datasetText, setDatasetText] = useState<string>("");
-  const [fileName, setFileName] = useState<string>("syn_cardio_cohort_v4.2.csv");
-  const [fileSize, setFileSize] = useState<string>("142 KB");
+  const [fileName, setFileName] = useState<string>("");
   const [datasetFile, setDatasetFile] = useState<File | null>(null);
 
-  const [purpose, setPurpose] = useState<string>("clinical_ml");
+  const [purpose, setPurpose] = useState<string>("software_testing");
   const [targetColumn, setTargetColumn] = useState<string>("target");
-  const [criticalSubgroup, setCriticalSubgroup] = useState<string>("subject.demographics.age >= 65");
+  const [criticalSubgroup, setCriticalSubgroup] = useState<string>("age >= 65");
   const [privacyLevel, setPrivacyLevel] = useState<string>("standard");
-  const [intendedUses, setIntendedUses] = useState<string[]>([
-    "software_testing",
-    "ml_prototyping",
-    "clinical_ml",
-  ]);
+  const [intendedUses, setIntendedUses] = useState<string[]>(["software_testing"]);
 
-  const policyId = "ml-sensitive-v1";
-  const policySha256 = "9f3a8b72e1c0d45f6a89c3b2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2";
+  const allUses = useMemo(
+    () => Array.from(new Set([purpose, ...intendedUses])),
+    [purpose, intendedUses]
+  );
+  const policyId = policyFor(allUses);
+  const [policy, setPolicy] = useState<PolicySummary | null>(null);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPolicy(null);
+    setPolicyError(null);
+    fetch(`${apiBaseUrl}/policies/${policyId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: PolicySummary) => !cancelled && setPolicy(data))
+      .catch((err: Error) => !cancelled && setPolicyError(err.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl, policyId]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setFileName(file.name);
-      setFileSize(`${Math.round(file.size / 1024)} KB`);
       setDatasetFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -44,8 +82,7 @@ export const MissionSetup: React.FC<MissionSetupProps> = ({ onStartRun, isLoadin
   const handleLoadSample = () => {
     const sample = generateHeartDiseaseSampleCsv();
     setDatasetText(sample);
-    setFileName("syn_cardio_cohort_v4.2.csv");
-    setFileSize("142 KB");
+    setFileName("heart_disease_benchmark.csv");
     setDatasetFile(null);
   };
 
@@ -57,385 +94,289 @@ export const MissionSetup: React.FC<MissionSetupProps> = ({ onStartRun, isLoadin
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveText = datasetText || generateHeartDiseaseSampleCsv();
+    if (!datasetText && !datasetFile) return;
 
     const mission = {
       purpose,
       target_column: targetColumn,
       critical_subgroups: criticalSubgroup ? [criticalSubgroup] : [],
       privacy_level: privacyLevel,
-      intended_uses: intendedUses.length > 0 ? intendedUses : [purpose],
+      intended_uses: allUses,
       policy_id: policyId,
-      seed: 42891,
+      seed: 1234,
     };
 
-    onStartRun(datasetFile, effectiveText, JSON.stringify(mission, null, 2));
+    onStartRun(datasetFile, datasetText, JSON.stringify(mission, null, 2));
   };
 
+  const hasData = Boolean(datasetText || datasetFile);
+  const preview = datasetText ? previewRows(datasetText) : null;
+  const columns = preview?.header.map((h) => h.trim()) ?? [];
+  const targetMissing = columns.length > 0 && targetColumn.trim() !== "" && !columns.includes(targetColumn.trim());
+  const subgroupColumn = criticalSubgroup.trim().split(/\s*(?:>=|<=|==|!=|>|<)\s*/)[0]?.trim() ?? "";
+  const subgroupMissing = columns.length > 0 && subgroupColumn !== "" && !columns.includes(subgroupColumn);
+  const unjudgedUses = policy ? allUses.filter((u) => !(u in policy.uses)) : [];
+
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-      {/* Forensic Orchestration Banner */}
-      <div className="relative overflow-hidden rounded-lg bg-[#11151a] p-6 border border-[#232a33]">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-mono tracking-widest text-[#2dd4bf] font-bold">
-                STAGE 01 // ORCHESTRATION
-              </span>
-              <span className="text-[#859490] text-xs">/</span>
-              <span className="text-xs font-mono text-[#8b95a3]">SPEC_v4.2.1-STRICT</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#e6eaf0] tracking-tight">
-              Mission Setup &amp; Invariant Binding
-            </h1>
-            <p className="text-sm text-[#8b95a3] max-w-3xl leading-relaxed">
-              Pre-register statistical compliance criteria, anchor synthetic schemas, and
-              cryptographically bind policy thresholds prior to evaluation ledger commitment.
-            </p>
-          </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Start an assurance run"
+        description="Upload the real training data, say what the synthetic copy will be used for, and SynPassport generates candidates, tests them against a locked policy, and issues a signed passport."
+      />
 
-          <div className="flex flex-wrap items-center gap-2 bg-[#0a0c0f] p-2.5 rounded border border-[#232a33]">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-[#17202b] text-xs font-mono text-[#e6eaf0]">
-              <span className="w-2 h-2 rounded-full bg-[#34d399]" />
-              <span>NOTARY_HSM: READY</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#17202b] text-xs font-mono text-[#859490]">
-              <span className="material-symbols-outlined text-xs text-[#2dd4bf]">policy</span>
-              <span>POLICY: ml-sensitive-v1</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        {/* Left Column: Ingestion & Invariant Binding (7 Cols) */}
-        <div className="xl:col-span-7 flex flex-col gap-6">
-          {/* Section 01.01: Dataset Ingestion & Binding */}
-          <section className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-[#2dd4bf] font-bold">01.01</span>
-                <h2 className="text-base font-semibold text-[#e6eaf0]">
-                  Dataset Ingestion &amp; Binding
-                </h2>
-              </div>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#17202b] text-[#34d399] border border-[#34d399]/30 font-semibold">
-                Target Ready
-              </span>
-            </div>
-
-            {/* Dropzone */}
-            <div
-              className="relative rounded border border-dashed border-[#232a33] hover:border-[#2dd4bf]/60 p-6 text-center transition-colors bg-[#0a0c0f] group cursor-pointer"
-            >
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6 min-w-0">
+          {/* Dataset */}
+          <Card
+            title="Training data"
+            description="CSV with a header row. The sample needs age, cholesterol, resting_bp and target."
+            actions={
+              <Button type="button" variant="ghost" size="sm" onClick={handleLoadSample}>
+                Use sample heart-disease data
+              </Button>
+            }
+          >
+            <div>
               <input
                 type="file"
-                accept=".csv,.parquet"
+                accept=".csv"
                 id="dataset-upload"
                 onChange={handleFileUpload}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                className="peer sr-only"
               />
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="w-10 h-10 rounded bg-[#17202b] flex items-center justify-center text-[#2dd4bf] group-hover:scale-105 transition-transform">
-                  <span className="material-symbols-outlined text-2xl">cloud_upload</span>
-                </div>
-                <p className="text-sm font-medium text-[#e6eaf0]">
-                  Drag synthetic dataset (.csv, .parquet) or{" "}
-                  <span className="text-[#2dd4bf] underline underline-offset-4">select file</span>
-                </p>
-                <p className="text-xs font-mono text-[#859490]">
-                  Deterministic parsing enabled. Minimum required: 200 records, max schema limit 64 dimensions.
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Benchmark Button */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleLoadSample}
-                className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#17202b] hover:bg-[#212b36] border border-[#232a33] text-xs font-mono text-[#e6eaf0] transition-colors"
+              <label
+                htmlFor="dataset-upload"
+                className={cx(
+                  "flex flex-col items-center justify-center gap-1 rounded border border-dashed px-6 py-8 text-center cursor-pointer transition-colors duration-200 ease-out",
+                  "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-accent peer-focus-visible:outline-offset-2",
+                  fileName ? "border-pass bg-pass-soft" : "border-line-strong hover:border-accent hover:bg-accent-soft"
+                )}
               >
-                <span className="text-[#2dd4bf]">⚡</span>
-                <span>Load Heart Disease Benchmark (1,024 rows)</span>
-              </button>
-              <span className="text-xs font-mono text-[#859490]">SHA-256 Engine: Active Stream</span>
+                {fileName ? (
+                  <>
+                    <span className="text-base font-medium text-ink">{fileName}</span>
+                    <span className="text-sm text-ink-2">
+                      {preview ? `${preview.total} records loaded` : "Loaded"} · choose a different file
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-base font-medium text-ink">Choose a CSV file</span>
+                    <span className="text-sm text-ink-2">or use the sample data above</span>
+                  </>
+                )}
+              </label>
             </div>
 
-            {/* Loaded File Card */}
-            <div className="flex items-center justify-between p-3.5 rounded bg-[#17202b] border border-[#232a33]">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-2 rounded bg-[#0a0c0f] text-[#34d399]">
-                  <span className="material-symbols-outlined text-xl">description</span>
+            {preview && preview.rows.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-ink-2">First {preview.rows.length} of {preview.total} records</p>
+                <div className="overflow-x-auto rounded border border-line">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surface-2 text-ink-2">
+                      <tr>
+                        {preview.header.map((h, i) => (
+                          <th key={i} scope="col" className="text-left font-medium px-3 py-2 whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {preview.rows.map((row, r) => (
+                        <tr key={r}>
+                          {row.map((cell, c) => (
+                            <td key={c} className="px-3 py-2 font-mono text-ink tabular-nums whitespace-nowrap">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-semibold text-[#e6eaf0] truncate">
-                      {fileName}
-                    </span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#11151a] text-[#34d399] border border-[#34d399]/30 font-bold uppercase">
-                      Verified
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-mono text-[#859490] truncate">
-                    {fileSize} · 1,024 records · 14 schema features · SHA256: 3a7b9c...8a9b
+              </div>
+            )}
+          </Card>
+
+          {/* Mission */}
+          <Card title="Mission" description="These are recorded in the passport and cannot change after the run starts.">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="purpose" label="Primary purpose">
+                <Select
+                  id="purpose"
+                  value={purpose}
+                  onChange={setPurpose}
+                  options={[
+                    { value: "software_testing", label: "Software testing" },
+                    { value: "ml_prototyping", label: "ML prototyping" },
+                    { value: "clinical_ml", label: "Clinical ML" },
+                  ]}
+                />
+              </Field>
+
+              <Field id="target-column" label="Target column" hint="The label a downstream model would predict.">
+                <input
+                  id="target-column"
+                  type="text"
+                  value={targetColumn}
+                  onChange={(e) => setTargetColumn(e.target.value)}
+                  placeholder="target"
+                  aria-describedby="target-column-hint"
+                  aria-invalid={targetMissing}
+                  className={cx(inputClass, "font-mono")}
+                />
+                {targetMissing && (
+                  <p className="mt-1 text-sm text-warn" role="status">
+                    Not a column in this file. Columns: {columns.slice(0, 8).join(", ")}
+                    {columns.length > 8 ? "…" : ""}
                   </p>
-                </div>
-              </div>
+                )}
+              </Field>
 
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleLoadSample}
-                  className="p-1.5 rounded hover:bg-[#212b36] text-[#859490] hover:text-[#e6eaf0] transition-colors"
-                  title="Reload Benchmark"
-                >
-                  <span className="material-symbols-outlined text-base">refresh</span>
-                </button>
-              </div>
-            </div>
-          </section>
+              <Field id="subgroup" label="Critical subgroup" hint="A group that must be well represented, e.g. age >= 65.">
+                <input
+                  id="subgroup"
+                  type="text"
+                  value={criticalSubgroup}
+                  onChange={(e) => setCriticalSubgroup(e.target.value)}
+                  placeholder="age >= 65"
+                  aria-describedby="subgroup-hint"
+                  aria-invalid={subgroupMissing}
+                  className={cx(inputClass, "font-mono")}
+                />
+                {subgroupMissing && (
+                  <p className="mt-1 text-sm text-warn" role="status">
+                    “{subgroupColumn}” is not a column in this file.
+                  </p>
+                )}
+              </Field>
 
-          {/* Section 01.02: Mission Schema & Purpose Binding */}
-          <section className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-[#2dd4bf] font-bold">01.02</span>
-                <h2 className="text-base font-semibold text-[#e6eaf0]">
-                  Mission Schema &amp; Purpose Binding
-                </h2>
-              </div>
-              <span className="text-xs font-mono text-[#859490]">SPEC_CLASS: CLINICAL</span>
-            </div>
-
-            {/* Target Column */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-mono text-[#8b95a3]">
-                <label htmlFor="target-col" className="uppercase font-semibold">
-                  Target Supervised Variable
-                </label>
-                <span className="text-[10px] lowercase text-[#859490]">type: binary_nominal</span>
-              </div>
-              <input
-                id="target-col"
-                type="text"
-                value={targetColumn}
-                onChange={(e) => setTargetColumn(e.target.value)}
-                className="w-full h-9 px-3 rounded bg-[#0a0c0f] border border-[#232a33] focus:border-[#2dd4bf] text-xs font-mono text-[#e6eaf0] outline-none transition-colors"
-                placeholder="e.g. target, hf_event"
-              />
+              <Field id="privacy-level" label="Privacy level">
+                <Select
+                  id="privacy-level"
+                  value={privacyLevel}
+                  onChange={setPrivacyLevel}
+                  options={[
+                    { value: "standard", label: "Standard" },
+                    { value: "high", label: "High" },
+                    { value: "strict", label: "Strict" },
+                  ]}
+                />
+              </Field>
             </div>
 
-            {/* Critical Subgroups */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-mono text-[#8b95a3]">
-                <label htmlFor="subgroup-expr" className="uppercase font-semibold">
-                  Critical Subgroup Specification
-                </label>
-                <span className="text-[10px] text-[#2dd4bf]">Strict Restricted Grammar</span>
-              </div>
-              <input
-                id="subgroup-expr"
-                type="text"
-                value={criticalSubgroup}
-                onChange={(e) => setCriticalSubgroup(e.target.value)}
-                className="w-full h-9 px-3 rounded bg-[#0a0c0f] border border-[#232a33] focus:border-[#2dd4bf] text-xs font-mono text-[#e6eaf0] outline-none transition-colors"
-                placeholder="subject.demographics.age >= 65"
-              />
-              <p className="text-[11px] font-mono text-[#859490]">
-                Pre-registers power bounds. Insufficient records in this cohort will issue an Actionable Refusal.
-              </p>
-            </div>
-
-            {/* Intended Uses Multi-Select */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-mono text-[#8b95a3]">
-                <span className="uppercase font-semibold">Declared Intended Uses</span>
-                <span className="text-[10px] text-[#859490]">Purpose-bound evaluation</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {[
-                  {
-                    id: "software_testing",
-                    title: "Software Testing",
-                    desc: "Schema, nulls, marginal bounds",
-                  },
-                  {
-                    id: "ml_prototyping",
-                    title: "ML Prototyping",
-                    desc: "Correlations, TSTR utility ratio",
-                  },
-                  {
-                    id: "clinical_ml",
-                    title: "Clinical ML",
-                    desc: "Subgroup CI power, strict privacy",
-                  },
-                  {
-                    id: "exploratory_analytics",
-                    title: "Exploratory Analytics",
-                    desc: "Distributional covariance",
-                  },
-                ].map((use) => {
-                  const isChecked = intendedUses.includes(use.id);
+            <fieldset className="mt-6 space-y-3">
+              <legend className="text-sm font-medium text-ink">Intended uses</legend>
+              <p className="text-sm text-ink-3">Each use gets its own verdict. Passing one never authorizes another.</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {USE_OPTIONS.map((use) => {
+                  const checked = intendedUses.includes(use.id);
                   return (
-                    <button
-                      type="button"
+                    <label
                       key={use.id}
-                      onClick={() => toggleIntendedUse(use.id)}
-                      className={`flex items-start gap-2.5 p-2.5 rounded border text-left transition-colors ${
-                        isChecked
-                          ? "bg-[#17202b] border-[#2dd4bf] text-[#e6eaf0]"
-                          : "bg-[#0a0c0f] border-[#232a33] text-[#8b95a3] hover:border-[#859490]"
-                      }`}
+                      className={cx(
+                        "flex items-start gap-3 rounded border px-3 py-3 cursor-pointer transition-colors duration-200 ease-out",
+                        checked ? "border-accent bg-accent-soft" : "border-line-strong hover:bg-surface-2"
+                      )}
                     >
-                      <div
-                        className={`w-4 h-4 rounded-sm flex items-center justify-center mt-0.5 shrink-0 ${
-                          isChecked
-                            ? "bg-[#2dd4bf] text-[#0a0c0f]"
-                            : "border border-[#232a33] bg-[#0a0c0f]"
-                        }`}
-                      >
-                        {isChecked && (
-                          <span className="material-symbols-outlined text-xs font-bold">check</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-[#e6eaf0]">{use.title}</div>
-                        <div className="text-[10px] font-mono text-[#859490]">{use.desc}</div>
-                      </div>
-                    </button>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleIntendedUse(use.id)}
+                        className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                      />
+                      <span className="space-y-0.5">
+                        <span className="block text-base font-medium text-ink">{use.label}</span>
+                        <span className="block text-sm text-ink-2">{use.note}</span>
+                      </span>
+                    </label>
                   );
                 })}
               </div>
-            </div>
-
-            {/* Privacy Defense Profile */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono text-[#8b95a3] uppercase font-semibold block">
-                Differential Privacy Epsilon Floor
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "low", label: "Low Risk", eps: "ε = 10.0" },
-                  { id: "standard", label: "Standard", eps: "ε = 1.25" },
-                  { id: "high", label: "Regulated", eps: "ε = 0.50" },
-                ].map((p) => (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() => setPrivacyLevel(p.id)}
-                    className={`py-2 px-3 rounded border text-center transition-colors font-mono text-xs ${
-                      privacyLevel === p.id
-                        ? "bg-[#17202b] border-[#2dd4bf] text-[#2dd4bf] font-bold"
-                        : "bg-[#0a0c0f] border-[#232a33] text-[#8b95a3] hover:text-[#e6eaf0]"
-                    }`}
-                  >
-                    <div>{p.label}</div>
-                    <div className="text-[10px] text-[#859490]">{p.eps}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
+            </fieldset>
+          </Card>
         </div>
 
-        {/* Right Column: Pre-Registered Policy & Initiation (5 Cols) */}
-        <div className="xl:col-span-5 flex flex-col gap-6">
-          {/* Policy Profile Card */}
-          <div className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232a33]">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg text-[#2dd4bf]">gavel</span>
-                <span className="text-xs font-mono font-bold uppercase text-[#e6eaf0]">
-                  Pre-Registered Policy
-                </span>
-              </div>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#17202b] text-[#2dd4bf] font-bold border border-[#2dd4bf]/20">
-                STRICT LOCK
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-[#859490] block mb-1">
-                  Policy Profile ID
-                </span>
-                <div className="p-2 rounded bg-[#0a0c0f] border border-[#232a33] font-mono text-xs text-[#2dd4bf] font-semibold">
-                  {policyId}
+        {/* Policy summary + primary action */}
+        <aside className="space-y-6 lg:sticky lg:top-32 self-start">
+          <Card
+            as="div"
+            title="Policy"
+            description="Chosen from the intended uses (the strictest one needed) and locked before any data is generated."
+          >
+            {policyError ? (
+              <p className="text-sm text-fail" role="alert">
+                Could not load policy {policyId} ({policyError}). Check that the API is running.
+              </p>
+            ) : !policy ? (
+              <p className="text-sm text-ink-3">Loading {policyId}…</p>
+            ) : (
+              <dl className="space-y-4 text-sm">
+                <div className="space-y-1">
+                  <dt className="text-ink-2">Profile</dt>
+                  <dd className="text-ink">
+                    {policy.name} <span className="text-ink-3">v{policy.version}</span>
+                    <Mono className="block text-ink-2">{policy.id}</Mono>
+                  </dd>
                 </div>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-mono uppercase text-[#859490] block mb-1">
-                  Immutable Policy SHA-256 Digest
-                </span>
-                <div className="p-2 rounded bg-[#0a0c0f] border border-[#232a33] font-mono text-[11px] text-[#8b95a3] break-all leading-tight">
-                  {policySha256}
+                <div className="space-y-1">
+                  <dt className="text-ink-2">SHA-256</dt>
+                  <dd>
+                    <Mono className="text-ink-2 break-all">{policy.sha256}</Mono>
+                  </dd>
                 </div>
-              </div>
-            </div>
+                <div className="space-y-1 border-t border-line pt-4">
+                  <dt className="text-ink-2">Checks per use</dt>
+                  <dd>
+                    <ul className="space-y-1">
+                      {allUses.map((u) => (
+                        <li key={u} className="flex justify-between gap-2">
+                          <span className="text-ink">{USE_LABELS[u] || u}</span>
+                          <span className="text-ink-2 tabular-nums">
+                            {policy.uses[u]
+                              ? policy.uses[u].includes("all")
+                                ? `all ${Object.keys(policy.requires).length}`
+                                : policy.uses[u].length
+                              : "not judged"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+                <div className="flex justify-between border-t border-line pt-4">
+                  <dt className="text-ink-2">Candidates</dt>
+                  <dd className="text-ink tabular-nums">up to {policy.budget.max_candidates ?? 3}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Agent repairs</dt>
+                  <dd className="text-ink tabular-nums">up to {policy.budget.max_repairs ?? 2}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-2">Human approval</dt>
+                  <dd className="text-ink">{policy.human_approval === "required" ? "Required" : "Optional"}</dd>
+                </div>
+                {unjudgedUses.length > 0 && (
+                  <p className="text-sm text-warn">This policy gives no verdict for: {unjudgedUses.join(", ")}.</p>
+                )}
+              </dl>
+            )}
+          </Card>
 
-            {/* Bound Gates Checklist */}
-            <div className="space-y-2 pt-2 border-t border-[#232a33]">
-              <span className="text-[10px] font-mono uppercase text-[#859490] font-semibold tracking-wider block">
-                Deterministic Policy Gates
-              </span>
-              <div className="space-y-1.5 font-mono text-xs">
-                {[
-                  { name: "Schema Structure & Null Constraints", req: "100.0% Pass" },
-                  { name: "Marginal Distribution TVD", req: "≤ 0.10 TVD" },
-                  { name: "Correlation Fidelity Bound", req: "≥ 0.85 Cosine" },
-                  { name: "TSTR Utility Ratio Bound", req: "≥ 0.90 Target" },
-                  { name: "Subgroup Power (age >= 65)", req: "N ≥ 171 (CI ≤ 0.15)" },
-                  { name: "Privacy Distance vs Holdout", req: "DCR ≥ Holdout" },
-                  { name: "Membership Inference Defense", req: "AUC ≤ 0.55" },
-                ].map((gate, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-2 rounded bg-[#0a0c0f] border border-[#232a33]"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#2dd4bf]" />
-                      <span className="text-[#e6eaf0] text-[11px] truncate">{gate.name}</span>
-                    </div>
-                    <span className="text-[10px] text-[#34d399] font-semibold shrink-0 ml-2">
-                      {gate.req}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Action Card */}
-          <div className="bg-[#11151a] rounded-lg p-5 border border-[#232a33] flex flex-col gap-3">
-            <button
+          <div className="space-y-2">
+            <Button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-3 px-4 rounded bg-[#2dd4bf] hover:bg-[#26bfae] active:bg-[#1fa394] text-[#0a0c0f] font-sans font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              variant="primary"
+              loading={isLoading}
+              disabled={!hasData || !policy}
+              className="w-full"
             >
-              {isLoading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-[#0a0c0f] border-t-transparent rounded-full animate-spin" />
-                  <span>Pinning Invariants &amp; Synthesizing...</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-lg">verified_user</span>
-                  <span>Anchor Invariants &amp; Initiate Run</span>
-                </>
-              )}
-            </button>
-
-            <div className="p-3 rounded bg-[#0a0c0f] border border-[#232a33] text-[11px] font-mono text-[#859490] leading-relaxed">
-              <span className="text-[#e6eaf0] font-semibold block mb-0.5">
-                Deterministic Execution Guarantee:
-              </span>
-              Execution is bound to cryptographically locked policies. Zero stochastic LLM
-              hallucinations involved in verification verdicts.
-            </div>
+              {isLoading ? "Starting run…" : "Start assurance run"}
+            </Button>
+            {!hasData && <p className="text-sm text-ink-3 text-center">Add training data to continue.</p>}
           </div>
-        </div>
+        </aside>
       </form>
     </div>
   );

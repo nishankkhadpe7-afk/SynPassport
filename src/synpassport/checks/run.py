@@ -10,6 +10,7 @@ import pandas as pd
 
 from synpassport.checks.base import BaseCheck, CheckResult
 from synpassport.checks.fidelity import CorrelationFidelityCheck, MarginalFidelityCheck
+from synpassport.checks.identifiers import IdentifierLeakageCheck
 from synpassport.checks.privacy import DCRVsHoldoutCheck, MembershipInferenceCheck
 from synpassport.checks.schema import SchemaValidityCheck
 from synpassport.checks.splitter import split_train_holdout
@@ -27,10 +28,13 @@ CHECK_REGISTRY: dict[str, BaseCheck] = {
     "correlation_fidelity": CorrelationFidelityCheck(),
     "utility_tstr_ratio": UtilityTSTRCheck(),
     "subgroup_utility_ci": SubgroupUtilityCheck(),
+    "subgroup_utility_ci_width": SubgroupUtilityCheck(),
     "privacy_dcr_vs_holdout": DCRVsHoldoutCheck(),
     "membership_inference_auc": MembershipInferenceCheck(),
     "sufficiency": SufficiencyCheck(),
+    "identifier_leakage": IdentifierLeakageCheck(),
 }
+
 
 
 def run_checks_pipeline(
@@ -97,7 +101,9 @@ def run_checks_pipeline(
             threshold_ref=str(threshold_spec),
             seed=seed,
             state=result.state,
-            metadata=result.metadata,
+            metadata=(
+                {**result.metadata, "error": result.error} if result.error else result.metadata
+            ),
         )
         evidence_records.append(rec)
 

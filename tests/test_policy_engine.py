@@ -26,6 +26,7 @@ def perfect_evidence() -> list[dict[str, Any]]:
     """Evidence where all checks exceed thresholds with narrow confidence intervals."""
     return [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.94, "ci_low": 0.92, "ci_high": 0.96},
         {"check_id": "correlation_fidelity", "value": 0.91, "ci_low": 0.88, "ci_high": 0.94},
         {"check_id": "utility_tstr_ratio", "value": 0.93, "ci_low": 0.91, "ci_high": 0.95},
@@ -40,6 +41,7 @@ def demo_step4_evidence() -> list[dict[str, Any]]:
     """Demo Step 4 evidence: prototyping passes, clinical has wide subgroup CI."""
     return [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.92, "ci_low": 0.90, "ci_high": 0.94},
         {"check_id": "correlation_fidelity", "value": 0.88, "ci_low": 0.85, "ci_high": 0.91},
         {"check_id": "utility_tstr_ratio", "value": 0.91, "ci_low": 0.90, "ci_high": 0.92},
@@ -55,6 +57,7 @@ def privacy_failing_evidence() -> list[dict[str, Any]]:
     """Evidence where candidate fails empirical confidentiality checks."""
     return [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.93, "ci_low": 0.91, "ci_high": 0.95},
         {"check_id": "correlation_fidelity", "value": 0.89, "ci_low": 0.86, "ci_high": 0.92},
         {"check_id": "utility_tstr_ratio", "value": 0.92, "ci_low": 0.90, "ci_high": 0.94},
@@ -76,7 +79,7 @@ def test_load_all_three_policy_profiles() -> None:
     for profile_id in ("software-testing", "ml-prototyping", "ml-sensitive-v1"):
         policy = load_policy(profile_id)
         assert policy["id"] == profile_id
-        assert policy["version"] == 1
+        assert policy["version"] == 2
         assert "sha256" in policy
         assert len(policy["sha256"]) == 64
         assert "requires" in policy
@@ -120,6 +123,7 @@ def test_state_function_errored_evidence_yields_insufficient() -> None:
     policy = load_policy("software-testing")
     errored_evidence = [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "error": "OutOfMemory during KS computation"},
     ]
     bundle = evaluate_policy_detailed(policy, errored_evidence)
@@ -133,6 +137,7 @@ def test_state_function_ci_width_limit() -> None:
     # Policy requires subgroup_utility_ci_width max 0.15
     evidence_too_wide = [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.95, "ci_low": 0.94, "ci_high": 0.96},
         {"check_id": "correlation_fidelity", "value": 0.90, "ci_low": 0.88, "ci_high": 0.92},
         {"check_id": "utility_tstr_ratio", "value": 0.92, "ci_low": 0.90, "ci_high": 0.94},
@@ -154,6 +159,7 @@ def test_state_function_warning_bands() -> None:
     # utility_tstr_ratio: min 0.90, warning_bands min 0.85
     evidence_in_warning = [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.95, "ci_low": 0.94, "ci_high": 0.96},
         {"check_id": "correlation_fidelity", "value": 0.90, "ci_low": 0.88, "ci_high": 0.92},
         # 0.88 is in [0.85, 0.90) warning band
@@ -175,6 +181,7 @@ def test_ci_decision_rule_spanning_threshold() -> None:
     # CI [0.52, 0.60] spans across 0.55 -> insufficient
     evidence = [
         {"check_id": "schema_validity", "value": 1.0, "state": "PASS"},
+        {"check_id": "identifier_leakage", "value": 0.0},
         {"check_id": "marginal_fidelity", "value": 0.95, "ci_low": 0.93, "ci_high": 0.97},
         {"check_id": "correlation_fidelity", "value": 0.90, "ci_low": 0.88, "ci_high": 0.92},
         {"check_id": "utility_tstr_ratio", "value": 0.92, "ci_low": 0.91, "ci_high": 0.93},

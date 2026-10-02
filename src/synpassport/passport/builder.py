@@ -21,6 +21,7 @@ from synpassport.passport.canonical import (
     canonical_json_dumps,
     hash_canonical_csv,
     hash_dataset_file,
+    normalize_for_canonical,
 )
 from synpassport.passport.keygen import compute_key_id
 from synpassport.passport.signer import load_public_key, sign_payload, verify_signature
@@ -118,6 +119,11 @@ class EvidencePassport:
             except Exception:
                 key_id = "unknown"
 
+        # Store exactly the canonical values that get signed, so the document carries
+        # no unsigned precision and survives JSON round-trips in other languages.
+        self.data = dict(
+            normalize_for_canonical({k: v for k, v in self.data.items() if k != "signature"})
+        )
         sig_b64 = sign_payload(self.data, signing_key)
         self.data["signature"] = {
             "alg": "Ed25519",
@@ -326,6 +332,7 @@ def approve_passport(
                 current_sig.get("key_id", "unknown") if isinstance(current_sig, dict) else "unknown"
             )
 
+    data = dict(normalize_for_canonical({k: v for k, v in data.items() if k != "signature"}))
     new_sig_b64 = sign_payload(data, signing_key)
     data["signature"] = {
         "alg": "Ed25519",
@@ -388,5 +395,6 @@ def verify_dataset_hash(
             actual_canon = hash_canonical_csv(dataset_path)
             return actual_canon.lower() == expected_canon.lower()
         return False
+
     except Exception:
         return False

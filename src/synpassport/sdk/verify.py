@@ -12,11 +12,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+
 from synpassport.passport.builder import verify_passport
-from synpassport.passport.canonical import hash_canonical_csv, hash_dataset_file
+from synpassport.passport.canonical import (
+    find_noncanonical_floats,
+    hash_canonical_csv,
+    hash_dataset_file,
+)
+
+
 from synpassport.passport.trust import (
     TrustedKeyRegistry,
     resolve_trusted_key,
@@ -77,23 +85,19 @@ def _resolve_public_key(
     if public_key is not None:
         return public_key
 
-    p_path = Path(passport_path)
+    env_key = os.environ.get("SYNPASSPORT_PUBLIC_KEY") or os.environ.get("PUBLIC_KEY_PATH")
+    if env_key:
+        if Path(env_key).is_file():
+            return Path(env_key)
+        return env_key
 
-    # Check next to passport: <passport_dir>/ed25519_public.pem or <passport>.pub.pem
-    sibling_pub = p_path.parent / "ed25519_public.pem"
-    if sibling_pub.is_file():
-        return sibling_pub
-
-    dot_pub = p_path.with_suffix(p_path.suffix + ".pub.pem")
-    if dot_pub.is_file():
-        return dot_pub
-
-    # Check project-level keys/
     project_pub = Path("./keys/ed25519_public.pem")
     if project_pub.is_file():
         return project_pub
 
     return None
+
+
 
 
 def verify(
@@ -212,6 +216,21 @@ def verify(
             reason_code="PASSPORT_EXPIRED",
             details={"error": exp_reason},
         )
+
+    unsigned_precision = find_noncanonical_floats(
+        {k: v for k, v in passport_data.items() if k != "signature"}
+    )
+    if unsigned_precision:
+        return VerificationResult(
+            valid=False,
+            reason_code="SIGNATURE_INVALID",
+            details={
+                "error": "Passport contains values not covered by the signature "
+                "(non-canonical float precision)",
+                "fields": unsigned_precision[:10],
+            },
+        )
+
 
     # -------------------------------------------------------------
     # Step 3: Resolve trusted signing key

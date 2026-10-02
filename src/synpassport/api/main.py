@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from synpassport.api.config import CORS_ORIGINS, REPLAY_MODE
-from synpassport.api.routers import runs, verify
+from synpassport.api.routers import policies, runs, verify
 
 __all__ = ["app"]
 
@@ -32,6 +32,7 @@ app.add_middleware(
 # Register routers split by concern
 app.include_router(runs.router)
 app.include_router(verify.router)
+app.include_router(policies.router)
 
 
 @app.get("/health", summary="Service health status")
