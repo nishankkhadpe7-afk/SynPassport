@@ -168,6 +168,11 @@ docker compose up --build
 SYNPASSPORT_REPLAY=1 docker compose up --build
 ```
 
+Docker Compose reads `LLM_API_KEY` (and optionally `LLM_MODEL`) from `.env`. If port 3000 is taken on your
+machine, run `WEB_PORT=3005 docker compose up --build` (PowerShell: `$env:WEB_PORT=3005; docker compose up --build`).
+The Docker image does not include CTGAN (it needs PyTorch); CTGAN requests fall back to the Gaussian copula and the
+passport records that. Install `pip install -e ".[ctgan]"` locally for real CTGAN training.
+
 - **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
 - **FastAPI Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **API Health Endpoint**: [http://localhost:8000/health](http://localhost:8000/health)
@@ -213,7 +218,7 @@ cd web
 npm run start -- -p 3005
 ```
 
-On Windows, double-click `start-synpassport.bat` to do both. The dashboard reads the API address from
+On Windows without Docker, double-click `start-synpassport.bat` to do both. The dashboard reads the API address from
 `web/.env.local` (`NEXT_PUBLIC_API_URL=http://127.0.0.1:8765`). Put your LLM key in `.env`
 (`LLM_API_KEY=...`, a Groq `gsk_` key works); without one, a rule-based planner makes the repair decisions.
 

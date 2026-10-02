@@ -36,7 +36,7 @@ from synpassport.checks.splitter import split_train_holdout
 from synpassport.generators.base import BaseGenerator
 from synpassport.generators.sdv_wrapper import CTGANGenerator, GaussianCopulaGenerator
 from synpassport.passport.builder import EvidencePassport, build_passport, get_code_version
-from synpassport.passport.canonical import hash_dataset_file
+from synpassport.passport.canonical import canonical_hash, hash_dataset_file
 from synpassport.policy.engine import evaluate_policy_detailed
 from synpassport.policy.loader import load_policy
 
@@ -195,7 +195,9 @@ class AssuranceAgentLoop:
         # with the same mission can never receive another dataset's passport)
         cache_key = compute_replay_key(
             mission=mission,
-            policy_id=policy_id,
+            # The policy's content hash is part of the key, so a changed policy never
+            # replays verdicts that were judged against an older version.
+            policy_id=f"{policy_id}@{canonical_hash(policy)}",
             seed=seed,
             dataset_sha256=hash_dataset_file(real_data_path),
         )

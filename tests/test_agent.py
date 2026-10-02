@@ -297,9 +297,13 @@ def test_replay_cache_offline(agent_test_data: dict[str, Any], tmp_path: Path) -
         output_dir=tmp_path / "cache_run_1",
     )
 
+    from synpassport.passport.canonical import canonical_hash
+    from synpassport.policy.loader import load_policy
+
+    # The key includes the policy's content hash, so an edited policy never replays.
     key = compute_replay_key(
         mission=agent_test_data["mission"],
-        policy_id="software-testing",
+        policy_id=f"software-testing@{canonical_hash(load_policy('software-testing'))}",
         seed=1234,
         dataset_sha256=hash_dataset_file(agent_test_data["data_csv"]),
     )

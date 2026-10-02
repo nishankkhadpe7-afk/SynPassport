@@ -1,0 +1,7 @@
+# node_modules from the host (e.g. Windows binaries) must never replace the ones installed in the image
+node_modules
+.next
+out
+.env.local
+.env*.local
+*.tsbuildinfo

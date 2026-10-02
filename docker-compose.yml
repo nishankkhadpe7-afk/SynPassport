@@ -11,7 +11,8 @@ services:
       - SYNPASSPORT_REPLAY=${SYNPASSPORT_REPLAY:-0}
       - SYNPASSPORT_APPROVER_TOKEN=${SYNPASSPORT_APPROVER_TOKEN:-}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-gemini-1.5-flash}
+      # Empty = provider default (a Groq gsk_ key uses qwen/qwen3.8-27b)
+      - LLM_MODEL=${LLM_MODEL:-}
     volumes:
       - ./data:/app/data
       - ./policies:/app/policies
@@ -25,6 +26,7 @@ services:
         # NEXT_PUBLIC_* values are baked into the browser bundle at build time
         - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
-      - "3000:3000"
+      # Set WEB_PORT=3005 if something else (e.g. Grafana) already uses port 3000
+      - "${WEB_PORT:-3000}:3000"
     depends_on:
       - api
