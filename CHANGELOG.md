@@ -1,6 +1,6 @@
 # SynPassport — Detailed Commit & Change History
 
-> **Last Updated**: `2026-10-02 23:40:21`  
+> **Last Updated**: `2026-10-02 23:40:46`  
 > **Auto-Update**: Enabled via `.githooks/pre-commit` and `scripts/update_changelog.py`  
 
 This document tracks every commit, feature addition, architectural improvement, security enhancement, and bug fix across the SynPassport codebase over time.
@@ -11,6 +11,7 @@ This document tracks every commit, feature addition, architectural improvement, 
 
 | Commit | Date | Author | Description | Impact |
 | :--- | :--- | :--- | :--- | :--- |
+| [`b1a4267`](#commit-b1a4267) | 2026-10-02 | vansh-09 | docs: add technical READMEs per component and automated changelog system | 919 insertions(+), 7 deletions(-) |
 | [`1da945b`](#commit-1da945b) | 2026-10-02 | vansh-09 | readme and loophole patching | 2066 insertions(+), 157 deletions(-) |
 | [`dfc4aea`](#commit-dfc4aea) | 2026-10-01 | vansh-09 | ui change | 6757 insertions(+), 1935 deletions(-) |
 | [`ec0e866`](#commit-ec0e866) | 2026-10-01 | nishankkhadpe7-afk | 50% | 593 insertions(+), 42 deletions(-) |
@@ -22,6 +23,27 @@ This document tracks every commit, feature addition, architectural improvement, 
 ---
 
 ## Detailed Commit Log
+
+### Commit `b1a4267` — docs: add technical READMEs per component and automated changelog system
+- **Hash**: `b1a42678f5715b811e989694763ebf55af7c6352`
+- **Author**: vansh-09 (`vanshkjain09@gmail.com`)
+- **Date**: `2026-10-02 23:40:21`
+- **Stats**: `9 files changed, 919 insertions(+), 7 deletions(-)`
+
+#### Component Breakdown
+- **Configuration & Infrastructure** (5 files):
+  - `Added` [post-commit](file:///Users/vanshjain/Desktop/SynPassport/.githooks/post-commit)
+  - `Added` [pre-commit](file:///Users/vanshjain/Desktop/SynPassport/.githooks/pre-commit)
+  - `Modified` [7e6fcb00490eda5fb5a6ff9a4a52e7e321489dd564356f8cc1c9ad7048a731ca.json](file:///Users/vanshjain/Desktop/SynPassport/replay/7e6fcb00490eda5fb5a6ff9a4a52e7e321489dd564356f8cc1c9ad7048a731ca.json)
+  - `Added` [install_hooks.py](file:///Users/vanshjain/Desktop/SynPassport/scripts/install_hooks.py)
+  - `Added` [update_changelog.py](file:///Users/vanshjain/Desktop/SynPassport/scripts/update_changelog.py)
+- **Documentation** (4 files):
+  - `Added` [CHANGELOG.md](file:///Users/vanshjain/Desktop/SynPassport/CHANGELOG.md)
+  - `Modified` [README.md](file:///Users/vanshjain/Desktop/SynPassport/README.md)
+  - `Added` [CHANGELOG.md](file:///Users/vanshjain/Desktop/SynPassport/docs/CHANGELOG.md)
+  - `Modified` [README.md](file:///Users/vanshjain/Desktop/SynPassport/docs/README.md)
+
+---
 
 ### Commit `1da945b` — readme and loophole patching
 - **Hash**: `1da945b9989991c6becf9145cb16a5d7f86736b7`
