@@ -1,9 +1,11 @@
 id: ml-sensitive-v1
-version: 1
+version: 2
 name: Sensitive ML Profile v1
 description: High-assurance profile for sensitive downstream modeling and clinical ML deployments.
 requires:
   schema_validity: pass
+  identifier_leakage:
+    max: 0.01
   marginal_fidelity:
     min: 0.90
   correlation_fidelity:
@@ -21,9 +23,11 @@ budget:
 uses:
   software_testing:
     - schema_validity
+    - identifier_leakage
     - marginal_fidelity
   ml_prototyping:
     - schema_validity
+    - identifier_leakage
     - marginal_fidelity
     - correlation_fidelity
     - utility_tstr_ratio

@@ -5,11 +5,16 @@ Validates user-declared mission parameters using Pydantic models.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from synpassport.checks.subgroups import parse_subgroup_expression
 
 __all__ = ["Mission"]
+
+_POLICY_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class Mission(BaseModel):
@@ -25,6 +30,23 @@ class Mission(BaseModel):
 
     model_config = {"extra": "allow"}
 
+    @field_validator("policy_id")
+    @classmethod
+    def _policy_id_is_profile_name(cls, value: str) -> str:
+        # Missions name a bundled policy profile; file paths are not accepted here.
+        if not _POLICY_ID_RE.match(value):
+            raise ValueError(
+                "policy_id must be a policy profile name (letters, digits, '-' or '_')"
+            )
+        return value
+
+    @field_validator("critical_subgroups")
+    @classmethod
+    def _subgroups_parse(cls, value: list[str]) -> list[str]:
+        for expr in value:
+            parse_subgroup_expression(expr)
+        return value
+
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         if not self.intended_uses and self.purpose:
@@ -33,5 +55,5 @@ class Mission(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Return mission representation as a dictionary."""
-        return self.model_dump()
+        return dict(self.model_dump())
 

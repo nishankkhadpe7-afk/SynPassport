@@ -11,6 +11,7 @@ import pandas as pd
 from scipy import stats
 
 from synpassport.checks.base import BaseCheck, CheckResult
+from synpassport.checks.identifiers import comparable_frames
 
 __all__ = ["MarginalFidelityCheck", "CorrelationFidelityCheck"]
 
@@ -33,6 +34,9 @@ class MarginalFidelityCheck(BaseCheck):
                 error="Expected pandas DataFrame inputs",
             )
 
+        # Identifier columns (all-unique keys) have no distribution to reproduce and
+        # text datetimes are compared as timestamps; both are decided from real data.
+        real_data, (synth_data,), id_cols = comparable_frames(real_data, synth_data)
         common_cols = [c for c in real_data.columns if c in synth_data.columns]
         if not common_cols:
             return CheckResult(
@@ -40,7 +44,7 @@ class MarginalFidelityCheck(BaseCheck):
                 value=0.0,
                 seed=seed,
                 state="FAIL",
-                error="No common columns between real and synthetic data",
+                error="No comparable columns between real and synthetic data",
             )
 
         per_feature: dict[str, float] = {}
@@ -85,6 +89,7 @@ class MarginalFidelityCheck(BaseCheck):
             per_feature=per_feature,
             worst_feature=worst_col,
             worst_feature_score=worst_val,
+            excluded_identifier_columns=id_cols,
         )
 
 
@@ -106,6 +111,7 @@ class CorrelationFidelityCheck(BaseCheck):
                 error="Expected pandas DataFrame inputs",
             )
 
+        real_data, (synth_data,), _ids = comparable_frames(real_data, synth_data)
         common_cols = [c for c in real_data.columns if c in synth_data.columns]
         if len(common_cols) < 2:
             return CheckResult(

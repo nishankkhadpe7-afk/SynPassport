@@ -6,70 +6,38 @@ import { VerdictState } from "@/types";
 interface StateBadgeProps {
   state: VerdictState | string;
   size?: "sm" | "md" | "lg";
-  className?: string;
 }
 
-export const StateBadge: React.FC<StateBadgeProps> = ({
-  state,
-  size = "md",
-  className = "",
-}) => {
-  const normState = (state || "").toUpperCase();
+/* Verdicts render as passport stamps: a double-ruled chip in the verdict's ink.
+   Colour is never the only signal — the word is always printed. */
+const STATES: Record<string, { label: string; color: string; bg: string }> = {
+  PASS: { label: "Pass", color: "var(--pass)", bg: "var(--pass-soft)" },
+  WARNING: { label: "Warning", color: "var(--warn)", bg: "var(--warn-soft)" },
+  FAIL: { label: "Fail", color: "var(--fail)", bg: "var(--fail-soft)" },
+  INSUFFICIENT_EVIDENCE: { label: "Insufficient evidence", color: "var(--neutral)", bg: "var(--neutral-soft)" },
+  INSUFFICIENT: { label: "Insufficient evidence", color: "var(--neutral)", bg: "var(--neutral-soft)" },
+};
 
-  const sizeClasses = {
-    sm: "px-1.5 py-0.5 text-[10px] gap-1 leading-none font-mono",
-    md: "px-2.5 py-1 text-xs gap-1.5 leading-none font-mono font-medium",
-    lg: "px-3 py-1.5 text-xs gap-2 leading-none font-mono font-semibold",
+export const StateBadge: React.FC<StateBadgeProps> = ({ state, size = "md" }) => {
+  const key = (state || "").toUpperCase();
+  const spec = STATES[key] || {
+    label: state ? state.charAt(0) + state.slice(1).toLowerCase() : "Unknown",
+    color: "var(--ink-2)",
+    bg: "var(--surface-2)",
+  };
+
+  const sizing = {
+    sm: "text-sm px-2 py-0.5",
+    md: "text-sm px-2.5 py-1",
+    lg: "text-base px-3.5 py-1.5",
   }[size];
 
-  switch (normState) {
-    case "PASS":
-      return (
-        <span
-          className={`inline-flex items-center rounded bg-[#11151a] text-[#34d399] border border-[#34d399] ${sizeClasses} ${className}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]" />
-          <span>PASS</span>
-        </span>
-      );
-    case "WARNING":
-    case "WARN":
-      return (
-        <span
-          className={`inline-flex items-center rounded bg-[#11151a] text-[#f59e0b] border border-[#f59e0b] ${sizeClasses} ${className}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
-          <span>WARNING</span>
-        </span>
-      );
-    case "FAIL":
-    case "FAILED":
-      return (
-        <span
-          className={`inline-flex items-center rounded bg-[#11151a] text-[#f87171] border border-[#f87171] ${sizeClasses} ${className}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#f87171]" />
-          <span>FAIL</span>
-        </span>
-      );
-    case "INSUFFICIENT_EVIDENCE":
-    case "INSUFFICIENT":
-      return (
-        <span
-          className={`inline-flex items-center rounded bg-[#11151a] text-[#7ba7d9] border border-dashed border-[#7ba7d9] ${sizeClasses} ${className}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#7ba7d9]" />
-          <span>INSUFFICIENT</span>
-        </span>
-      );
-    default:
-      return (
-        <span
-          className={`inline-flex items-center rounded bg-[#11151a] text-[#8b95a3] border border-[#232a33] ${sizeClasses} ${className}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#8b95a3]" />
-          <span>{normState || "UNKNOWN"}</span>
-        </span>
-      );
-  }
+  return (
+    <span
+      className={`stamp ${sizing}`}
+      style={{ color: spec.color, ["--stamp-bg" as string]: spec.bg } as React.CSSProperties}
+    >
+      {spec.label}
+    </span>
+  );
 };

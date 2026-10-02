@@ -79,7 +79,7 @@ def handle_verify(args: argparse.Namespace) -> int:
             print(f"Error: Passport file not found: {pass_path}", file=sys.stderr)
         return 2
 
-    pub_key = args.public_key or args.key
+    pub_key = args.public_key
     result = verify(
         dataset_path=data_path,
         passport_path=pass_path,
@@ -117,6 +117,13 @@ def handle_issue(args: argparse.Namespace) -> int:
         if not synth_path.is_file():
             print(f"Error: Synthetic dataset file not found: {synth_path}", file=sys.stderr)
             return 2
+        if not args.key and not args.unsigned:
+            print(
+                "Error: --key is required to sign the passport "
+                "(use --unsigned to write an unsigned draft for inspection only)",
+                file=sys.stderr,
+            )
+            return 2
 
         # 1. Run checks pipeline
         evidence_records = run_checks_pipeline(
@@ -140,7 +147,11 @@ def handle_issue(args: argparse.Namespace) -> int:
         if args.mission and Path(args.mission).is_file():
             import yaml
 
-            mission = yaml.safe_load(Path(args.mission).read_text(encoding="utf-8"))
+            loaded_mission = yaml.safe_load(Path(args.mission).read_text(encoding="utf-8"))
+            if not isinstance(loaded_mission, dict):
+                print("Error: Mission file must contain a mapping", file=sys.stderr)
+                return 2
+            mission = loaded_mission
 
         # 4. Build passport
         passport = build_passport(
@@ -158,7 +169,8 @@ def handle_issue(args: argparse.Namespace) -> int:
         if args.json:
             print(passport.to_json(indent=2))
         else:
-            print(f"Issued Evidence Passport written to: {out_path}")
+            label = "Evidence Passport" if args.key else "UNSIGNED draft passport"
+            print(f"Issued {label} written to: {out_path}")
             for use, v in verdicts.items():
                 print(f"  - {use}: {v}")
 
@@ -274,7 +286,10 @@ def create_parser() -> argparse.ArgumentParser:
         "--allow-warning", action="store_true", help="Permit WARNING verdicts as acceptable"
     )
     verify_p.add_argument(
-        "--public-key", "--key", dest="public_key", help="Path to Ed25519 public key PEM"
+        "--public-key",
+        "--key",
+        dest="public_key",
+        help="Trusted Ed25519 public key PEM (or set SYNPASSPORT_PUBLIC_KEY)",
     )
     verify_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
@@ -292,6 +307,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--output", "-o", help="Output path for passport JSON (default: passport.json)"
     )
     issue_p.add_argument("--key", help="Path to Ed25519 private key PEM for signing")
+    issue_p.add_argument(
+        "--unsigned",
+        action="store_true",
+        help="Allow writing an unsigned draft passport (it will never pass verify)",
+    )
     issue_p.add_argument("--key-id", help="Explicit public key ID")
     issue_p.add_argument("--candidate-id", help="Candidate identifier")
     issue_p.add_argument("--seed", type=int, default=1234, help="Evaluation random seed")

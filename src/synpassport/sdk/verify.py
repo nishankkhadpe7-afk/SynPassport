@@ -11,11 +11,12 @@ Executes sequential, fail-closed verification checks per design.md §6:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from synpassport.passport.builder import verify_passport
-from synpassport.passport.canonical import hash_dataset_file
+from synpassport.passport.canonical import find_noncanonical_floats, hash_dataset_file
 from synpassport.policy.loader import load_policy
 
 __all__ = ["REASON_CODES", "VerificationResult", "verify"]
@@ -61,29 +62,22 @@ class VerificationResult:
         return f"VerificationResult(valid={self.valid}, reason_code='{self.reason_code}')"
 
 
-def _resolve_public_key(
-    passport_path: str | Path,
-    public_key: Any | None,
-) -> Any | None:
-    """Locate candidate public key from argument or standard locations."""
+PUBLIC_KEY_ENV_VAR = "SYNPASSPORT_PUBLIC_KEY"
+
+
+def _resolve_public_key(public_key: Any | None) -> Any | None:
+    """Return the trusted verification key.
+
+    The key must come from the caller or from the SYNPASSPORT_PUBLIC_KEY environment
+    variable. It is never discovered next to the passport, because whoever supplies the
+    passport could then also supply the key and forge a valid-looking signature.
+    """
     if public_key is not None:
         return public_key
 
-    p_path = Path(passport_path)
-
-    # Check next to passport: <passport_dir>/ed25519_public.pem or <passport>.pub.pem
-    sibling_pub = p_path.parent / "ed25519_public.pem"
-    if sibling_pub.is_file():
-        return sibling_pub
-
-    dot_pub = p_path.with_suffix(p_path.suffix + ".pub.pem")
-    if dot_pub.is_file():
-        return dot_pub
-
-    # Check project-level keys/
-    project_pub = Path("./keys/ed25519_public.pem")
-    if project_pub.is_file():
-        return project_pub
+    env_key = os.environ.get(PUBLIC_KEY_ENV_VAR, "").strip()
+    if env_key:
+        return env_key
 
     return None
 
@@ -177,13 +171,30 @@ def verify(
     # -------------------------------------------------------------
     # Step 2: Recompute canonical hash; verify signature
     # -------------------------------------------------------------
-    resolved_key = _resolve_public_key(pass_file, public_key)
+    resolved_key = _resolve_public_key(public_key)
     if resolved_key is None:
         return VerificationResult(
             valid=False,
             reason_code="SIGNATURE_INVALID",
             details={
-                "error": "Public key not provided and could not be resolved from standard paths"
+                "error": (
+                    "No trusted public key supplied. Pass --public-key / public_key= "
+                    f"or set {PUBLIC_KEY_ENV_VAR}."
+                )
+            },
+        )
+
+    unsigned_precision = find_noncanonical_floats(
+        {k: v for k, v in passport_data.items() if k != "signature"}
+    )
+    if unsigned_precision:
+        return VerificationResult(
+            valid=False,
+            reason_code="SIGNATURE_INVALID",
+            details={
+                "error": "Passport contains values not covered by the signature "
+                "(non-canonical float precision)",
+                "fields": unsigned_precision[:10],
             },
         )
 

@@ -117,16 +117,27 @@ def evaluate_check(
             reason="Evidence missing for required check",
         )
 
-    # Condition: Execution error
-    if evidence_record.get("error") or evidence_record.get("status") in (
+    # Condition: Execution error (error may be top-level or inside metadata)
+    metadata = evidence_record.get("metadata")
+    record_error = evidence_record.get("error") or (
+        metadata.get("error") if isinstance(metadata, dict) else None
+    )
+    if record_error or evidence_record.get("status") in (
         "error",
         "failed",
         "errored",
     ):
-        err_msg = str(evidence_record.get("error") or "Check execution error")
+        err_msg = str(record_error or "Check execution error")
+        # A check that already determined FAIL keeps that verdict; anything else
+        # that errored can never count as evidence of passing.
+        errored_state = (
+            CheckState.FAIL
+            if str(evidence_record.get("state", "")).upper() == "FAIL"
+            else CheckState.INSUFFICIENT_EVIDENCE
+        )
         return CheckEvaluationResult(
             check_id=check_id,
-            state=CheckState.INSUFFICIENT_EVIDENCE,
+            state=errored_state,
             threshold=threshold_spec,
             reason=f"Check execution error: {err_msg}",
         )
@@ -150,6 +161,13 @@ def evaluate_check(
         if len(evidence_record["ci"]) == 2:
             ci_low = float(evidence_record["ci"][0])
             ci_high = float(evidence_record["ci"][1])
+
+    # CI-width requirements are judged on the width of the interval, not on the
+    # metric's point estimate. Evidence that carries bounds is converted to a width.
+    if "ci_width" in check_id and ci_low is not None and ci_high is not None:
+        value = float(ci_high - ci_low)
+        ci_low = None
+        ci_high = None
 
     ci_list = [ci_low, ci_high] if (ci_low is not None and ci_high is not None) else None
 

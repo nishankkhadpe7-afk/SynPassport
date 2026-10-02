@@ -2,60 +2,189 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   SynPassport design tokens — the single source for colour, type, radius,
+   shadow and motion. Components reference these via Tailwind (see
+   tailwind.config.ts) or directly as var(--…).
+   ========================================================================== */
+
 :root {
-  --background: #0a0c0f;
-  --foreground: #e6eaf0;
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #faf7f2;
+  --surface: #fffdf9;
+  --surface-2: #f5efe6;
+  --surface-inverse: #2b2622;
+  --on-inverse: #f3ede4;
+  --on-inverse-pass: #a8d1ae;
+  --on-inverse-fail: #f0a596;
+
+  /* Lines */
+  --line: #e8e1d7;
+  --line-strong: #d6ccbe;
+
+  /* Text */
+  --ink: #2b2622;
+  --ink-2: #625850;
+  --ink-3: #7a6f65;
+
+  /* Accent: primary actions and focus only */
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-soft: #fbecdb;
+  --on-accent: #ffffff;
+
+  /* Verdict colours (muted to sit in the warm palette) */
+  --pass: #3d6b47;
+  --pass-soft: #e6efe5;
+  --warn: #7c6510;
+  --warn-soft: #f3ecd2;
+  --fail: #a63a2b;
+  --fail-soft: #f6e2dc;
+  --neutral: #625850;
+  --neutral-soft: #ede7de;
+
+  /* Shape and depth */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 12px;
+  --shadow: 0 1px 2px rgba(43, 38, 34, 0.04), 0 2px 8px rgba(43, 38, 34, 0.04);
+  --shadow-overlay: 0 12px 40px rgba(43, 38, 34, 0.18);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur: 180ms;
+
+  /* Type */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+}
+
+/* Warm dark mode: deep brown-charcoal, never cold blue-black */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1c1815;
+    --surface: #24201c;
+    --surface-2: #2c2723;
+    --surface-inverse: #120f0d;
+    --on-inverse: #ede6dc;
+    --line: #3a332d;
+    --line-strong: #4a423a;
+    --ink: #ede6dc;
+    --ink-2: #bdb2a5;
+    --ink-3: #a1968a;
+    --accent: #e39a52;
+    --accent-hover: #f0b070;
+    --accent-soft: #3b2a1b;
+    --on-accent: #1c1815;
+    --pass: #9cc7a3;
+    --pass-soft: #26332a;
+    --warn: #dcc56f;
+    --warn-soft: #353019;
+    --fail: #eb9a8a;
+    --fail-soft: #3d2420;
+    --neutral: #bdb2a5;
+    --neutral-soft: #322c27;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1815;
+  --surface: #24201c;
+  --surface-2: #2c2723;
+  --surface-inverse: #120f0d;
+  --on-inverse: #ede6dc;
+  --line: #3a332d;
+  --line-strong: #4a423a;
+  --ink: #ede6dc;
+  --ink-2: #bdb2a5;
+  --ink-3: #a1968a;
+  --accent: #e39a52;
+  --accent-hover: #f0b070;
+  --accent-soft: #3b2a1b;
+  --on-accent: #1c1815;
+  --pass: #9cc7a3;
+  --pass-soft: #26332a;
+  --warn: #dcc56f;
+  --warn-soft: #353019;
+  --fail: #eb9a8a;
+  --fail-soft: #3d2420;
+  --neutral: #bdb2a5;
+  --neutral-soft: #322c27;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Inter, Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
-/* Material Symbols font configuration */
-.material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
-  vertical-align: middle;
-  line-height: 1;
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
-.material-symbols-outlined.fill-1 {
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+/* One visible, consistent focus ring for every interactive element */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-/* Terminal Precision Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Thin, warm scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: #0a0c0f;
+@layer components {
+  /* Verdict stamp: the one deliberate flourish — a double-ruled ink stamp */
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid currentColor;
+    box-shadow: inset 0 0 0 2px var(--stamp-bg), inset 0 0 0 3px currentColor;
+    background: var(--stamp-bg);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 37%, var(--surface-2) 63%);
+    background-size: 400% 100%;
+    animation: skeleton 1.4s ease infinite;
+    border-radius: var(--radius-sm);
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #232a33;
-  border-radius: 2px;
+@keyframes skeleton {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #303a46;
-}
-
-/* Planar Elevation utilities (strictly borders and solid shifts, zero box-shadow) */
-.terminal-panel {
-  background: #11151a;
-  border: 1px solid #232a33;
-  border-radius: 0.5rem;
-}
-
-.terminal-panel-raised {
-  background: #171c23;
-  border: 1px solid #232a33;
-}
-
-.terminal-border {
-  border-color: #232a33;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

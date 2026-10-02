@@ -1,10 +1,23 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 
+// Display serif (Source Serif 4, SIL Open Font License) used only for the wordmark.
+// Bundled in the repo so builds never depend on an internet connection.
+const display = localFont({
+  src: [{ path: "../fonts/source-serif-4-latin-500-normal.woff2", weight: "500", style: "normal" }],
+  variable: "--font-display",
+  display: "swap",
+  fallback: ["Georgia", "serif"],
+});
+
 export const metadata: Metadata = {
-  title: "SynPassport — Cockpit v2.4",
-  description: "Purpose-bound empirical assurance and Evidence Passports for synthetic datasets",
+  title: "SynPassport",
+  description: "Purpose-bound assurance and Evidence Passports for synthetic datasets",
 };
+
+// Applies a saved theme before first paint so the page never flashes the wrong theme.
+const themeScript = `try{var t=localStorage.getItem('synpassport-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -12,23 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning className={display.variable}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-          rel="stylesheet"
-        />
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen bg-[#0a0c0f] text-[#e6eaf0] font-sans antialiased selection:bg-[#2dd4bf] selection:text-[#003731]">
-        {children}
-      </body>
+      <body className="min-h-screen bg-bg text-ink antialiased">{children}</body>
     </html>
   );
 }
-

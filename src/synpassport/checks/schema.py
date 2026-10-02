@@ -9,6 +9,11 @@ import numpy as np
 import pandas as pd
 
 from synpassport.checks.base import BaseCheck, CheckResult
+from synpassport.checks.identifiers import (
+    detect_datetime_format,
+    detect_identifier_columns,
+    identifier_format_mask,
+)
 
 __all__ = ["SchemaValidityCheck"]
 
@@ -63,6 +68,8 @@ class SchemaValidityCheck(BaseCheck):
         valid_row_mask = np.ones(n_rows, dtype=bool)
         column_reports: dict[str, dict[str, Any]] = {}
 
+        id_cols = set(detect_identifier_columns(real_data))
+
         for col in real_data.columns:
             real_col = real_data[col]
             synth_col = synth_data[col]
@@ -97,10 +104,25 @@ class SchemaValidityCheck(BaseCheck):
                     r_std = float(real_clean.std()) if len(real_clean) > 1 else 0.0
                     lower_bound = r_min - (3.0 * r_std)
                     upper_bound = r_max + (3.0 * r_std)
+                    # A column that is never negative in the real data (amounts, ages,
+                    # counts) must not become negative in the synthetic data either.
+                    if r_min >= 0.0:
+                        lower_bound = max(lower_bound, 0.0)
 
                     synth_numeric = pd.to_numeric(synth_col, errors="coerce")
                     in_range = (synth_numeric >= lower_bound) & (synth_numeric <= upper_bound)
                     col_mask &= in_range.fillna(False)
+            elif col in id_cols:
+                # Identifiers are unique by design: check the format, not the value set.
+                col_mask &= identifier_format_mask(real_col, synth_col)
+            elif (dt_fmt := detect_datetime_format(real_col)) is not None:
+                # Text datetimes: must parse with the real format and stay in the real span
+                real_ts = pd.to_datetime(real_col.astype(str), format=dt_fmt, errors="coerce")
+                synth_ts = pd.to_datetime(synth_col.astype(str), format=dt_fmt, errors="coerce")
+                span = real_ts.max() - real_ts.min()
+                lo, hi = real_ts.min() - 0.05 * span, real_ts.max() + 0.05 * span
+                ok = synth_ts.notna() & (synth_ts >= lo) & (synth_ts <= hi)
+                col_mask &= (ok | synth_col.isna()).to_numpy()
             else:
                 # Categorical domain check
                 real_domain = set(real_col.dropna().astype(str).unique())

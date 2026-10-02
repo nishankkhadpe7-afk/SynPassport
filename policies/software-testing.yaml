@@ -1,9 +1,11 @@
 id: software-testing
-version: 1
+version: 2
 name: Software Testing Profile
 description: Assurance profile for non-production functional and integration testing.
 requires:
   schema_validity: pass
+  identifier_leakage:
+    max: 0.01
   marginal_fidelity:
     min: 0.80
 budget:
@@ -12,6 +14,7 @@ budget:
 uses:
   software_testing:
     - schema_validity
+    - identifier_leakage
     - marginal_fidelity
 warning_bands:
   marginal_fidelity:

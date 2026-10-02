@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { VerificationResult } from "@/types";
+import { StateBadge } from "./StateBadge";
+import { Button, Card, EmptyState, Mono, Notice, PageHeader, Select, cx } from "./ui";
 
 interface TamperDemoProps {
   passport: Record<string, unknown> | null;
@@ -14,8 +16,40 @@ interface TamperDemoProps {
   isVerifying?: boolean;
 }
 
-const ORIGINAL_HASH = "3a7b9c1d8e2f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b";
-const TAMPERED_HASH = "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b3a7b9c1d8e2f4a5b6c7d8e9f0a1b2c3";
+const USE_LABELS: Record<string, string> = {
+  software_testing: "Software testing",
+  ml_prototyping: "ML prototyping",
+  clinical_ml: "Clinical ML",
+  exploratory_analytics: "Exploratory analytics",
+};
+
+/** SHA-256 of the exact UTF-8 bytes, matching how the server hashes the file. */
+async function sha256Hex(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** Nudge the first numeric cell of the first data row by +0.1, keeping everything else byte-identical. */
+function tamperOneCell(csv: string): { text: string; column: string } | null {
+  const eol = csv.includes("\r\n") ? "\r\n" : "\n";
+  const lines = csv.split(eol);
+  if (lines.length < 2) return null;
+  const header = lines[0].split(",");
+  const cells = lines[1].split(",");
+  for (let i = 0; i < cells.length; i++) {
+    const n = Number(cells[i]);
+    if (cells[i].trim() !== "" && Number.isFinite(n)) {
+      const decimals = Math.max(1, (cells[i].split(".")[1] || "").length);
+      cells[i] = (n + 0.1).toFixed(decimals);
+      lines[1] = cells.join(",");
+      return { text: lines.join(eol), column: header[i] || `column ${i + 1}` };
+    }
+  }
+  return null;
+}
 
 export const TamperDemo: React.FC<TamperDemoProps> = ({
   passport,
@@ -23,338 +57,278 @@ export const TamperDemo: React.FC<TamperDemoProps> = ({
   onVerifyCustom,
   isVerifying = false,
 }) => {
-  const [isTampered, setIsTampered] = useState<boolean>(true); // Initial state matches design mockup drill
-  const [cholesterolVal, setCholesterolVal] = useState<string>("245.9");
+  const original = candidateCsv;
+  const eol = original.includes("\r\n") ? "\r\n" : "\n";
 
-  const handleTamper = () => {
-    setIsTampered(true);
-    setCholesterolVal("245.9");
+  const dataset = (passport?.dataset ?? {}) as Record<string, unknown>;
+  const manifestHash = String(dataset.sha256 || "");
+  const datasetName = String(dataset.name || "candidate.csv");
+  const purposes = Object.keys((passport?.verdicts ?? {}) as Record<string, unknown>);
+
+  const [csvContent, setCsvContent] = useState<string>(original);
+  const [computedHash, setComputedHash] = useState<string>("");
+  const [purpose, setPurpose] = useState<string>(purposes[0] || "software_testing");
+  const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null);
+  const [lastChange, setLastChange] = useState<string>("");
+
+  // Load the real bound dataset whenever a run's file arrives
+  useEffect(() => {
+    setCsvContent(original);
+    setVerifyResult(null);
+    setLastChange("");
+  }, [original]);
+
+  // Keep the chosen purpose valid for this passport
+  useEffect(() => {
+    if (purposes.length > 0 && !purposes.includes(purpose)) setPurpose(purposes[0]);
+  }, [purposes, purpose]);
+
+  // Hash exactly what will be sent to the server
+  useEffect(() => {
+    let cancelled = false;
+    if (!csvContent) {
+      setComputedHash("");
+      return;
+    }
+    if (typeof crypto === "undefined" || !crypto.subtle) {
+      setComputedHash("");
+      return;
+    }
+    sha256Hex(csvContent).then((h) => {
+      if (!cancelled) setComputedHash(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [csvContent]);
+
+  const isModified = csvContent !== original;
+  const hashesMatch = Boolean(computedHash) && computedHash === manifestHash;
+  const rowCount = useMemo(() => Math.max(0, csvContent.split(/\r?\n/).filter(Boolean).length - 1), [csvContent]);
+
+  const resetResult = () => setVerifyResult(null);
+
+  const handleTamperSingleCell = () => {
+    const result = tamperOneCell(csvContent);
+    if (result) {
+      setCsvContent(result.text);
+      setLastChange(`Changed the first value in “${result.column}” by +0.1`);
+      resetResult();
+    }
   };
 
-  const handleReset = () => {
-    setIsTampered(false);
-    setCholesterolVal("245.8");
+  const handleResetOriginal = () => {
+    setCsvContent(original);
+    setLastChange("");
+    resetResult();
   };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    file.arrayBuffer().then((buf) => {
+      setCsvContent(new TextDecoder("utf-8").decode(buf));
+      setLastChange(`Loaded ${file.name}`);
+      resetResult();
+    });
+    e.target.value = "";
+  };
+
+  const handleEdit = (value: string) => {
+    // Browsers normalize textarea line endings to "\n"; restore the file's own endings
+    // so an edit that is undone by hand still hashes identically.
+    setCsvContent(eol === "\r\n" ? value.replace(/\r?\n/g, "\r\n") : value);
+    setLastChange("Edited by hand");
+    resetResult();
+  };
+
+  const handleRunVerify = async () => {
+    if (!passport) return;
+    const res = await onVerifyCustom(csvContent, passport, purpose);
+    setVerifyResult(res);
+  };
+
+  if (!passport || !original) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title="Tamper test"
+          description="Change a single value in the synthetic data and verify it against its passport. Any change breaks the hash binding, and the loader refuses the file."
+        />
+        <EmptyState
+          title={passport ? "Loading the signed dataset" : "No signed dataset yet"}
+          description={
+            passport
+              ? "Fetching the exact file this passport is bound to."
+              : "Complete a run from Setup. The tamper test uses the real synthetic file its passport signed."
+          }
+        />
+      </div>
+    );
+  }
+
+  const guardBlocked = verifyResult ? !verifyResult.valid : null;
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-      {/* Forensic Banner */}
-      <div className="relative overflow-hidden rounded-lg bg-[#11151a] p-5 border border-[#232a33]">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-4xl">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#17202b] text-[#f87171] border border-[#f87171]/30 font-bold">
-                STAGE 07 // ADVERSARIAL DRILL
-              </span>
-              <span className="text-xs font-mono text-[#859490]">ZERO_LLM_DETERMINISTIC_SECURITY</span>
-            </div>
-            <h1 className="text-lg sm:text-2xl font-bold text-[#e6eaf0] tracking-tight">
-              Cryptographic Invariance Test
-            </h1>
-            <p className="text-xs sm:text-sm text-[#8b95a3] leading-relaxed">
-              Demonstrating how modifying even a single byte in the synthetic dataset immediately
-              shatters the Ed25519 signature binding.
+    <div className="space-y-8">
+      <PageHeader
+        title="Tamper test"
+        description="Change a single value in the synthetic data and verify it against its passport. Any change breaks the hash binding, and the loader refuses the file."
+      />
+
+      <Card
+        title="Synthetic dataset"
+        description={
+          <>
+            The exact file the passport signed, <span className="font-mono text-ink">{datasetName}</span>. Edit any character, or use a quick action.
+          </>
+        }
+        actions={
+          <span className={cx("text-sm font-medium", isModified ? "text-fail" : "text-pass")} role="status">
+            {isModified ? "Modified" : "Original"}
+          </span>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Button variant="danger" size="sm" onClick={handleTamperSingleCell}>
+            Tamper one cell
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleResetOriginal} disabled={!isModified}>
+            Reset to original
+          </Button>
+          <label className="relative inline-flex">
+            <input type="file" accept=".csv" onChange={handleFileUpload} className="peer sr-only" />
+            <span className="inline-flex items-center h-8 px-3 rounded text-sm text-ink-2 hover:text-ink hover:bg-surface-2 cursor-pointer transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-accent">
+              Upload a CSV
+            </span>
+          </label>
+          {lastChange && isModified && <span className="text-sm text-ink-2">{lastChange}</span>}
+        </div>
+
+        <label htmlFor="tamper-csv" className="sr-only">
+          Synthetic dataset CSV
+        </label>
+        <textarea
+          id="tamper-csv"
+          value={csvContent}
+          onChange={(e) => handleEdit(e.target.value)}
+          rows={8}
+          spellCheck={false}
+          className="w-full rounded border border-line-strong bg-surface-2 p-3 font-mono text-sm leading-relaxed text-ink resize-y focus:border-accent focus:outline-none"
+        />
+        <p className="mt-2 text-sm text-ink-3 tabular-nums">{rowCount} records</p>
+
+        <div className="mt-6 pt-6 border-t border-line flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2 sm:w-64">
+            <label htmlFor="tamper-purpose" className="block text-sm font-medium text-ink">
+              Verify for purpose
+            </label>
+            <Select
+              id="tamper-purpose"
+              value={purpose}
+              onChange={(v) => {
+                setPurpose(v);
+                resetResult();
+              }}
+              options={(purposes.length > 0 ? purposes : ["software_testing"]).map((p) => ({
+                value: p,
+                label: USE_LABELS[p] || p,
+              }))}
+            />
+          </div>
+          <Button variant="primary" onClick={handleRunVerify} loading={isVerifying}>
+            {isVerifying ? "Verifying…" : "Verify dataset and passport"}
+          </Button>
+        </div>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card
+          title="Verification result"
+          actions={verifyResult ? <StateBadge state={verifyResult.valid ? "PASS" : "FAIL"} size="sm" /> : undefined}
+        >
+          {verifyResult ? (
+            <Notice
+              tone={verifyResult.valid ? "pass" : "fail"}
+              role={verifyResult.valid ? "status" : "alert"}
+              title={
+                verifyResult.valid
+                  ? "Verified: the file matches its passport"
+                  : verifyResult.reason_code === "DATASET_HASH_MISMATCH"
+                  ? "Rejected: the file was changed"
+                  : "Rejected"
+              }
+            >
+              <span className="font-mono text-ink">{verifyResult.reason_code}</span>
+              <span className="block">{verifyResult.description}</span>
+            </Notice>
+          ) : (
+            <p className="text-sm text-ink-2">
+              The server recomputes the hash and checks the signature, purpose and approval. Run a verification to see its verdict.
             </p>
-          </div>
+          )}
 
-          <div className="flex items-center gap-3 shrink-0 font-mono text-xs">
-            <div className="bg-[#0a0c0f] px-3 py-2 rounded border border-[#232a33]">
-              <div className="flex items-center justify-between gap-3 text-[10px] text-[#859490] uppercase">
-                <span>BINDING ENGINE</span>
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    isTampered ? "bg-[#f87171] animate-ping" : "bg-[#34d399]"
-                  }`}
-                />
-              </div>
-              <div
-                className={`font-semibold mt-0.5 ${
-                  isTampered ? "text-[#f87171]" : "text-[#34d399]"
-                }`}
-              >
-                {isTampered ? "ED25519: REJECTED" : "ED25519: VERIFIED"}
-              </div>
+          <dl className="mt-6 space-y-4">
+            <div className="space-y-1">
+              <dt className="text-sm text-ink-2">Hash recorded in the passport</dt>
+              <dd>
+                <Mono className="text-ink-2">{manifestHash || "Not recorded"}</Mono>
+              </dd>
             </div>
-
-            <div className="bg-[#0a0c0f] px-3 py-2 rounded border border-[#232a33]">
-              <div className="text-[10px] text-[#859490] uppercase">STRICT INTERCEPTOR</div>
-              <div className="font-semibold text-[#2dd4bf] mt-0.5">HALT_ON_DRIFT</div>
+            <div className="space-y-1">
+              <dt className="text-sm text-ink-2">Hash of the file above</dt>
+              <dd>
+                {computedHash ? (
+                  <Mono className={hashesMatch ? "text-pass" : "text-fail"}>{computedHash}</Mono>
+                ) : (
+                  <span className="text-sm text-ink-3">Computing…</span>
+                )}
+              </dd>
             </div>
-          </div>
-        </div>
-      </div>
+            {computedHash && (
+              <p className={cx("text-sm font-medium", hashesMatch ? "text-pass" : "text-fail")}>
+                {hashesMatch ? "Hashes match." : "Hashes differ: the file is not the one that was signed."}
+              </p>
+            )}
+          </dl>
+        </Card>
 
-      {/* Main Two-Column Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-        {/* Left Column: Dataset Verification & Bit-Flip Simulator */}
-        <div className="flex flex-col rounded-lg bg-[#11151a] border border-[#232a33] overflow-hidden">
-          <div className="bg-[#17202b] px-4 py-3 border-b border-[#232a33] flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#2dd4bf] text-base">tune</span>
-              <span className="text-xs font-mono font-bold uppercase text-[#e6eaf0] tracking-wider">
-                Dataset Verification &amp; Bit-Flip Simulator
-              </span>
-            </div>
-            <span className="text-xs font-mono text-[#8b95a3]">TARGET: ROW 104</span>
-          </div>
-
-          <div className="p-4 space-y-4">
-            {/* Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleTamper}
-                  className="relative px-3 py-1.5 bg-[#93000a] text-[#ffdad6] hover:bg-[#93000a]/80 active:scale-95 transition-all rounded font-mono text-xs uppercase font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-sm text-[#f87171]">warning</span>
-                  <span>Tamper 1 cell (+0.1 cholesterol)</span>
-                  {isTampered && (
-                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#f87171] opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#f87171]" />
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="px-3 py-1.5 bg-[#17202b] text-[#e6eaf0] hover:bg-[#212b36] active:scale-95 transition-all rounded border border-[#232a33] font-mono text-xs uppercase font-medium flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-sm">restart_alt</span>
-                  <span>Reset Original Dataset</span>
-                </button>
-              </div>
-
-              <div className="text-xs font-mono text-[#859490]">FILE: syn_cardio_cohort_v4.2.csv</div>
-            </div>
-
-            {/* Table */}
-            <div className="overflow-x-auto bg-[#0a0c0f] rounded border border-[#232a33]">
-              <table className="w-full text-left font-mono text-xs">
-                <thead>
-                  <tr className="bg-[#17202b] text-[#859490] uppercase text-[10px] tracking-wider border-b border-[#232a33]">
-                    <th className="py-2.5 px-3">Row #</th>
-                    <th className="py-2.5 px-3">patient_id</th>
-                    <th className="py-2.5 px-3">age</th>
-                    <th className="py-2.5 px-3">sex</th>
-                    <th className="py-2.5 px-3">resting_bp</th>
-                    <th className="py-2.5 px-3">cholesterol</th>
-                    <th className="py-2.5 px-3">fasting_bs</th>
-                    <th className="py-2.5 px-3">target</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#232a33] text-[#e6eaf0]">
-                  <tr className="opacity-40">
-                    <td className="py-2 px-3 text-[#859490]">102</td>
-                    <td className="py-2 px-3">PT-0102</td>
-                    <td className="py-2 px-3">54</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">120</td>
-                    <td className="py-2 px-3">198.0</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">0</td>
-                  </tr>
-                  <tr className="opacity-40">
-                    <td className="py-2 px-3 text-[#859490]">103</td>
-                    <td className="py-2 px-3">PT-0103</td>
-                    <td className="py-2 px-3">49</td>
-                    <td className="py-2 px-3">1</td>
-                    <td className="py-2 px-3">130</td>
-                    <td className="py-2 px-3">215.0</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">0</td>
-                  </tr>
-
-                  {/* ACTIVE ROW 104 */}
-                  <tr
-                    className={`transition-colors duration-200 ${
-                      isTampered ? "bg-[#f87171]/15 text-[#ffdad6]" : "bg-[#17202b]"
-                    }`}
-                  >
-                    <td className="py-2 px-3 font-bold flex items-center gap-1">
-                      <span className="material-symbols-outlined text-xs text-[#f87171]">
-                        arrow_right
-                      </span>
-                      <span className={isTampered ? "text-[#f87171]" : "text-[#e6eaf0]"}>104</span>
-                    </td>
-                    <td className="py-2 px-3 font-medium">PT-0104</td>
-                    <td className="py-2 px-3">63</td>
-                    <td className="py-2 px-3">1</td>
-                    <td className="py-2 px-3">145</td>
-                    <td className="py-2 px-3">
-                      <span
-                        className={`px-1.5 py-0.5 rounded font-bold ${
-                          isTampered
-                            ? "bg-[#93000a] text-[#ffdad6] border border-[#f87171]"
-                            : "text-[#34d399]"
-                        }`}
-                      >
-                        {cholesterolVal}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3">1</td>
-                    <td className="py-2 px-3">1</td>
-                  </tr>
-
-                  <tr className="opacity-40">
-                    <td className="py-2 px-3 text-[#859490]">105</td>
-                    <td className="py-2 px-3">PT-0105</td>
-                    <td className="py-2 px-3">57</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">128</td>
-                    <td className="py-2 px-3">204.0</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">0</td>
-                  </tr>
-                  <tr className="opacity-40">
-                    <td className="py-2 px-3 text-[#859490]">106</td>
-                    <td className="py-2 px-3">PT-0106</td>
-                    <td className="py-2 px-3">68</td>
-                    <td className="py-2 px-3">1</td>
-                    <td className="py-2 px-3">152</td>
-                    <td className="py-2 px-3">280.0</td>
-                    <td className="py-2 px-3">0</td>
-                    <td className="py-2 px-3">1</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Tamper Diff Note */}
-            <div className="flex items-center justify-between p-3 rounded bg-[#0a0c0f] border border-[#232a33] font-mono text-xs">
-              <span className="text-[#859490]">Cell Mutation:</span>
-              <span className={isTampered ? "text-[#f87171] font-bold" : "text-[#34d399]"}>
-                {isTampered
-                  ? "ORIGINAL: 245.8 -> MODIFIED: 245.9 (Δ +0.1000)"
-                  : "UNTOUCHED: 245.8 (Δ 0.0000)"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Real-Time Cryptographic Binding & Attestation Status */}
-        <div className="flex flex-col gap-5">
-          {/* Real-time Status Card */}
-          <div
-            className={`rounded-lg p-5 border flex flex-col gap-4 font-mono text-xs ${
-              isTampered
-                ? "bg-[#11151a] border-[#f87171]"
-                : "bg-[#11151a] border-[#34d399]"
-            }`}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-[#232a33]">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`material-symbols-outlined text-lg ${
-                    isTampered ? "text-[#f87171]" : "text-[#34d399]"
-                  }`}
-                >
-                  {isTampered ? "gfm" : "verified_user"}
+        <Card
+          title="Loader guard"
+          description={
+            <>
+              What a training script sees when it calls <span className="font-mono text-ink">synpassport.load_dataset()</span> with this file.
+            </>
+          }
+        >
+          <pre className="whitespace-pre-wrap break-words rounded bg-inverse p-4 font-mono text-sm leading-relaxed text-on-inverse">
+            <span className="block opacity-60">$ python -m pipeline.train</span>
+            <span className="block">{`>>> df = synpassport.load_dataset("${datasetName}", purpose="${purpose}")`}</span>
+            {guardBlocked === null ? (
+              <span className="block mt-2 opacity-70">Waiting for verification…</span>
+            ) : guardBlocked ? (
+              <>
+                <span className="block mt-2 font-semibold" style={{ color: "var(--on-inverse-fail)" }}>
+                  {`PassportError: [${verifyResult?.reason_code}]`}
                 </span>
-                <span className="text-xs font-bold uppercase text-[#e6eaf0]">
-                  {isTampered
-                    ? "ED25519 ATTESTATION: CRITICAL REJECTION"
-                    : "ED25519 ATTESTATION: INTACT & VALID"}
+                <span className="block">{verifyResult?.description}</span>
+                <span className="block mt-2">Training blocked. Exit code 1.</span>
+              </>
+            ) : (
+              <>
+                <span className="block mt-2" style={{ color: "var(--on-inverse-pass)" }}>
+                  {`Binding verified for purpose '${purpose}'.`}
                 </span>
-              </div>
-              <span
-                className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
-                  isTampered
-                    ? "bg-[#93000a] text-[#ffdad6] border-[#f87171]"
-                    : "bg-[#17202b] text-[#34d399] border-[#34d399]"
-                }`}
-              >
-                {isTampered ? "HASH_MISMATCH" : "SIGNATURE_PASS"}
-              </span>
-            </div>
-
-            <p className="text-xs text-[#8b95a3] font-sans leading-relaxed">
-              {isTampered
-                ? "A 1-byte discrepancy in row 104 mutated the canonical JCS byte representation. Ed25519 signature computation fails verification."
-                : "Exact bitstream matches original notary commit. Cryptographic signature validates against enclave public key."}
-            </p>
-
-            {/* Side-by-Side SHA-256 Digest Diff Comparison */}
-            <div className="space-y-3 p-3 rounded bg-[#0a0c0f] border border-[#232a33]">
-              <div>
-                <div className="flex items-center justify-between text-[10px] text-[#859490] uppercase mb-1">
-                  <span>Expected Canonical SHA-256</span>
-                  <span className="text-[#34d399]">CERTIFIED IN PASSPORT</span>
-                </div>
-                <div className="p-2 rounded bg-[#11151a] border border-[#232a33] text-[#34d399] break-all leading-tight">
-                  {ORIGINAL_HASH}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between text-[10px] text-[#859490] uppercase mb-1">
-                  <span>Live Computed SHA-256</span>
-                  <span className={isTampered ? "text-[#f87171] font-bold" : "text-[#34d399]"}>
-                    {isTampered ? "MISMATCH DETECTED" : "EXACT MATCH"}
-                  </span>
-                </div>
-                <div
-                  className={`p-2 rounded bg-[#11151a] border break-all leading-tight ${
-                    isTampered
-                      ? "border-[#f87171] text-[#f87171]"
-                      : "border-[#34d399] text-[#34d399]"
-                  }`}
-                >
-                  {isTampered ? TAMPERED_HASH : ORIGINAL_HASH}
-                </div>
-              </div>
-            </div>
-
-            {/* Mathematical Cryptographic Verification Trace */}
-            <div className="space-y-2 pt-2 border-t border-[#232a33]">
-              <span className="text-[10px] uppercase font-bold text-[#859490] tracking-wider block">
-                Deterministic Verification Pipeline
-              </span>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between p-2 rounded bg-[#0a0c0f] border border-[#232a33]">
-                  <span className="text-[#859490]">1. JCS RFC 8785 Canonicalization:</span>
-                  <span className="text-[#34d399] font-bold">PASS</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded bg-[#0a0c0f] border border-[#232a33]">
-                  <span className="text-[#859490]">2. SHA-256 Payload Hash Check:</span>
-                  <span
-                    className={
-                      isTampered ? "text-[#f87171] font-bold" : "text-[#34d399] font-bold"
-                    }
-                  >
-                    {isTampered ? "REJECTED (MISMATCH)" : "MATCH CONFIRMED"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded bg-[#0a0c0f] border border-[#232a33]">
-                  <span className="text-[#859490]">3. Ed25519 Curve Verification:</span>
-                  <span
-                    className={
-                      isTampered ? "text-[#f87171] font-bold" : "text-[#34d399] font-bold"
-                    }
-                  >
-                    {isTampered ? "SIGNATURE_FAIL" : "VALID"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Strict Security Policy Callout */}
-          <div className="p-4 rounded-lg bg-[#11151a] border border-[#232a33] font-mono text-xs space-y-1.5">
-            <div className="flex items-center gap-2 text-[#2dd4bf] font-bold">
-              <span className="material-symbols-outlined text-sm">shield</span>
-              <span>Zero-Tolerance Bit-Exact Integrity Principle</span>
-            </div>
-            <p className="text-[11px] text-[#8b95a3] font-sans leading-relaxed">
-              If a synthetic dataset is tampered with by even 1 byte post-notarization, downstream
-              consumers, auditor tools, and automated pipelines immediately reject the attestation. No
-              silent data drift can ever pass undetected.
-            </p>
-          </div>
-        </div>
+                <span className="block">{`Loaded ${rowCount} records.`}</span>
+              </>
+            )}
+          </pre>
+          <p className="mt-4 text-sm text-ink-3">
+            This panel mirrors the server&apos;s real verdict: the loader runs the same checks before any training starts.
+          </p>
+        </Card>
       </div>
     </div>
   );
 };
+
