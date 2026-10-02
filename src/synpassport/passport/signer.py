@@ -8,7 +8,6 @@ import base64
 from pathlib import Path
 from typing import Any
 
-from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
@@ -113,7 +112,5 @@ def verify_signature(
         sig_bytes = base64.b64decode(signature_b64)
         pub_key.verify(sig_bytes, target_bytes)
         return True
-    except (InvalidSignature, ValueError, TypeError, OSError):
-        return False
     except Exception:
         return False

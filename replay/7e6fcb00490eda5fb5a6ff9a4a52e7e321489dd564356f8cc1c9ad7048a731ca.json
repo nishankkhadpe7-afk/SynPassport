@@ -15,7 +15,7 @@
       "fail_count": 0,
       "inconclusive_count": 0,
       "mean_score": 0.865,
-      "csv_path": "C:\\Users\\Nishank\\AppData\\Local\\Temp\\pytest-of-Nishank\\pytest-32\\test_full_scripted_agent_run0\\run_scripted\\candidate_001.csv"
+      "csv_path": "/private/var/folders/zf/w3j1ml0515n95n1b6zbhzxw80000gn/T/pytest-of-vanshjain/pytest-12/test_full_scripted_agent_run0/run_scripted/candidate_001.csv"
     },
     {
       "candidate_id": "candidate_002",
@@ -26,7 +26,7 @@
       "fail_count": 0,
       "inconclusive_count": 0,
       "mean_score": 0.8500000000000001,
-      "csv_path": "C:\\Users\\Nishank\\AppData\\Local\\Temp\\pytest-of-Nishank\\pytest-32\\test_full_scripted_agent_run0\\run_scripted\\candidate_002.csv"
+      "csv_path": "/private/var/folders/zf/w3j1ml0515n95n1b6zbhzxw80000gn/T/pytest-of-vanshjain/pytest-12/test_full_scripted_agent_run0/run_scripted/candidate_002.csv"
     }
   ],
   "repairs": [
@@ -59,9 +59,11 @@
   },
   "passport": {
     "passport_version": "0.1.0",
+    "mode": "live",
     "dataset": {
       "name": "candidate_001.csv",
-      "sha256": "ff695fd91ca54bccd1fa3890e45441e310985ae2302c4ac0029e80f047022bdf"
+      "sha256": "67d5f854fb0c97eecac3f5f73672033cdaeaefcbfa1adb4dbf2dd57d6df4bfbf",
+      "canonical_sha256": "67d5f854fb0c97eecac3f5f73672033cdaeaefcbfa1adb4dbf2dd57d6df4bfbf"
     },
     "mission": {
       "purpose": "predictive testing",
@@ -77,16 +79,18 @@
       "sha256": "4a17a6fb63292a9bedb1df409fe624b30d614ce3fcec51ed32b0e766b67b98be"
     },
     "run": {
-      "code_version": "git:7a5e793cb652",
+      "code_version": "git:unknown",
       "seeds": [
         1234
       ],
       "candidates_evaluated": 2,
-      "repairs_attempted": 1
+      "repairs_attempted": 1,
+      "hypotheses_evaluated": 3,
+      "mode": "live"
     },
     "evidence": [
       {
-        "run_id": "run_21e4a621",
+        "run_id": "run_578fd4ed",
         "candidate_id": "candidate_001",
         "check_id": "schema_validity",
         "value": 1.0,
@@ -113,10 +117,10 @@
             }
           }
         },
-        "created_at": "2026-10-01T05:59:42.447658+00:00"
+        "created_at": "2026-10-02T18:01:58.932527+00:00"
       },
       {
-        "run_id": "run_21e4a621",
+        "run_id": "run_578fd4ed",
         "candidate_id": "candidate_001",
         "check_id": "marginal_fidelity",
         "value": 0.7300000000000001,
@@ -137,7 +141,7 @@
           "worst_feature": "target",
           "worst_feature_score": 0.6
         },
-        "created_at": "2026-10-01T05:59:42.453190+00:00"
+        "created_at": "2026-10-02T18:01:58.933742+00:00"
       }
     ],
     "repairs": [
@@ -159,6 +163,6 @@
       "timestamp": null
     },
     "audit_signatures": [],
-    "issued_at": "2026-10-01T05:59:42.610556+00:00"
+    "issued_at": "2026-10-02T18:01:58.950565+00:00"
   }
 }

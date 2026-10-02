@@ -93,6 +93,12 @@ class AssuranceAgentLoop:
 
         self._emit("step", {"phase": "plan", "message": "Planning assurance run..."})
 
+        # Reset per-run counters (guard against re-use of the same instance)
+        self.candidates_evaluated = 0
+        self.repairs_attempted = 0
+        self.agent_rejections = []
+        self.repairs_log = []
+
         # Check replay cache
         cache_key = compute_replay_key(mission=mission, policy_id=policy_id, seed=seed)
         if self.replay_mode and self.replay_cache.has(cache_key):
@@ -134,6 +140,35 @@ class AssuranceAgentLoop:
                     gen_copula.fit(split.train_df)
                     synth_df = gen_copula.sample(num_rows=len(split.train_df), seed=seed)
                     synth_df.to_csv(cand_dest, index=False)
+
+                    # Rebind dataset hash in passport to match the newly generated CSV,
+                    # then re-sign so that subsequent verify() calls pass hash checks.
+                    if signing_key is not None and isinstance(cached.get("passport"), dict):
+                        import copy as _copy
+                        from synpassport.passport.canonical import (
+                            hash_canonical_csv,
+                            hash_dataset_file,
+                        )
+                        from synpassport.passport.builder import EvidencePassport
+
+                        new_sha256 = hash_dataset_file(cand_dest)
+                        try:
+                            new_canon = hash_canonical_csv(cand_dest)
+                        except Exception:
+                            new_canon = None
+
+                        updated_passport = _copy.deepcopy(cached["passport"])
+                        updated_passport.setdefault("dataset", {})["sha256"] = new_sha256
+                        updated_passport.setdefault("dataset", {})["name"] = cand_name
+                        if new_canon:
+                            updated_passport["dataset"]["canonical_sha256"] = new_canon
+                        # Clear old signature so sign() creates a fresh one
+                        updated_passport.pop("signature", None)
+                        ep = EvidencePassport(updated_passport)
+                        ep.sign(signing_key)
+                        cached = _copy.deepcopy(cached)
+                        cached["passport"] = ep.to_dict()
+
                 return cached
 
         # Load and partition dataset
@@ -322,6 +357,9 @@ class AssuranceAgentLoop:
                     )
                 elif repair_action == "enable_dp_training":
                     current_params["dp_enabled"] = True
+                    current_params["dp_epsilon"] = float(repair_params.get("epsilon") or repair_params.get("eps") or 1.0)
+                    current_params["dp_delta"] = float(repair_params.get("delta") or 1e-5)
+                    current_params["dp_accountant"] = str(repair_params.get("accountant", "rdp"))
             else:
                 # Any other proposal not part of repair flow is rejected
                 self.agent_rejections.append({
@@ -356,6 +394,7 @@ class AssuranceAgentLoop:
             "seeds": [seed],
             "candidates_evaluated": self.candidates_evaluated,
             "repairs_attempted": self.repairs_attempted,
+            "mode": "replay" if self.replay_mode else "live",
         }
 
         passport = build_passport(

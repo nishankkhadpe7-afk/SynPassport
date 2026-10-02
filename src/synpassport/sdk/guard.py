@@ -6,6 +6,7 @@ downstream training or analytics pipelines.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,8 @@ def load_dataset(
 ) -> pd.DataFrame:
     """Load dataset after strictly validating Evidence Passport against declared purpose.
 
+    Eliminates TOCTOU race conditions by reading raw bytes once, verifying cryptographic
+    digest against those bytes, and parsing the dataframe directly from the in-memory buffer.
     Raises PassportError on any non-OK verification result.
     """
     d_path = Path(dataset_path)
@@ -54,6 +57,14 @@ def load_dataset(
         raise PassportError(
             f"Dataset file does not exist: {d_path}", reason_code="DATASET_HASH_MISMATCH"
         )
+
+    # Read bytes once to avoid TOCTOU file-swapping between verification and ingestion
+    try:
+        raw_bytes = d_path.read_bytes()
+    except Exception as exc:
+        raise PassportError(
+            f"Failed to read dataset file bytes: {exc}", reason_code="DATASET_HASH_MISMATCH"
+        ) from exc
 
     if passport_path is not None:
         p_path = Path(passport_path)
@@ -72,6 +83,7 @@ def load_dataset(
         purpose=purpose,
         allow_warning=allow_warning,
         public_key=public_key,
+        dataset_bytes=raw_bytes,
     )
 
     if not result.valid:
@@ -81,10 +93,15 @@ def load_dataset(
             reason_code=result.reason_code,
         )
 
-    # Load dataset safely
-    if d_path.suffix.lower() == ".csv":
-        return pd.read_csv(d_path)
-    elif d_path.suffix.lower() in (".parquet", ".pq"):
-        return pd.read_parquet(d_path)
+    # Parse dataframe directly from verified memory buffer (TOCTOU-safe)
+    suffix = d_path.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(io.BytesIO(raw_bytes))
+    elif suffix in (".parquet", ".pq"):
+        return pd.read_parquet(io.BytesIO(raw_bytes))
     else:
-        return pd.read_csv(d_path)
+        raise PassportError(
+            f"Unsupported dataset file format '{suffix}' for path: {d_path}. "
+            "Supported formats: .csv, .parquet, .pq",
+            reason_code="PASSPORT_MALFORMED",
+        )

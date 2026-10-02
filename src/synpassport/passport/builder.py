@@ -7,7 +7,9 @@ and human approval status.
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import json
 import subprocess
 from datetime import UTC, datetime
@@ -17,6 +19,7 @@ from typing import Any
 from synpassport.passport.canonical import (
     canonical_hash,
     canonical_json_dumps,
+    hash_canonical_csv,
     hash_dataset_file,
 )
 from synpassport.passport.keygen import compute_key_id
@@ -27,6 +30,7 @@ __all__ = [
     "approve_passport",
     "build_passport",
     "get_code_version",
+    "hash_canonical_csv",
     "verify_dataset_hash",
     "verify_passport",
 ]
@@ -67,6 +71,43 @@ class EvidencePassport:
     def to_json(self, indent: int = 2) -> str:
         """Serialize passport dictionary to formatted JSON string."""
         return json.dumps(self.data, indent=indent)
+
+    def to_intoto_statement(self) -> dict[str, Any]:
+        """Export as in-toto attestation statement (v1)."""
+        d = self.to_dict()
+        d_name = d.get("dataset", {}).get("name", "dataset.csv")
+        d_sha = d.get("dataset", {}).get("sha256", "")
+        return {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+                {
+                    "name": d_name,
+                    "digest": {
+                        "sha256": d_sha,
+                    },
+                }
+            ],
+            "predicateType": "https://synpassport.dev/attestation/v1",
+            "predicate": d,
+        }
+
+    def to_dsse_envelope(self) -> dict[str, Any]:
+        """Export as Dead Simple Signing Envelope (DSSE) per in-toto spec."""
+        statement = self.to_intoto_statement()
+        statement_bytes = canonical_json_dumps(statement)
+        payload_b64 = base64.b64encode(statement_bytes).decode("ascii")
+        sig = self.data.get("signature", {})
+        sigs = []
+        if sig and isinstance(sig, dict) and sig.get("value"):
+            sigs.append({
+                "keyid": sig.get("key_id", "unknown"),
+                "sig": sig.get("value", ""),
+            })
+        return {
+            "payloadType": "application/vnd.in-toto+json",
+            "payload": payload_b64,
+            "signatures": sigs,
+        }
 
     def sign(self, signing_key: Any, key_id: str | None = None) -> str:
         """Sign canonical bytes of the passport minus 'signature' and attach signature block."""
@@ -174,6 +215,14 @@ def build_passport(
         else:
             normalized_evidence.append({"raw": str(item)})
 
+    # Compute optional canonical content hash for CSV datasets
+    d_canon_sha256: str | None = None
+    if path.suffix.lower() == ".csv" and path.is_file():
+        try:
+            d_canon_sha256 = hash_canonical_csv(path)
+        except Exception:
+            pass
+
     # Resolve run metadata
     resolved_code_version = code_version
     if resolved_code_version is None and run_info:
@@ -181,27 +230,40 @@ def build_passport(
     if resolved_code_version is None:
         resolved_code_version = get_code_version()
 
+    cands_eval = (
+        run_info.get("candidates_evaluated", candidates_evaluated)
+        if run_info
+        else candidates_evaluated
+    )
+    repairs_att = (
+        run_info.get("repairs_attempted", repairs_attempted)
+        if run_info
+        else repairs_attempted
+    )
+    run_mode = run_info.get("mode", "live") if run_info else "live"
+
     run_dict: dict[str, Any] = {
         "code_version": resolved_code_version,
         "seeds": seeds if seeds is not None else (run_info.get("seeds") if run_info else [1234]),
-        "candidates_evaluated": (
-            run_info.get("candidates_evaluated", candidates_evaluated)
-            if run_info
-            else candidates_evaluated
-        ),
-        "repairs_attempted": (
-            run_info.get("repairs_attempted", repairs_attempted) if run_info else repairs_attempted
-        ),
+        "candidates_evaluated": cands_eval,
+        "repairs_attempted": repairs_att,
+        "hypotheses_evaluated": cands_eval + repairs_att,
+        "mode": run_mode,
     }
 
     now_iso = issued_at or datetime.now(UTC).isoformat()
 
+    dataset_dict: dict[str, Any] = {
+        "name": d_name,
+        "sha256": d_sha256,
+    }
+    if d_canon_sha256:
+        dataset_dict["canonical_sha256"] = d_canon_sha256
+
     passport_dict: dict[str, Any] = {
         "passport_version": "0.1.0",
-        "dataset": {
-            "name": d_name,
-            "sha256": d_sha256,
-        },
+        "mode": run_mode,
+        "dataset": dataset_dict,
         "mission": copy.deepcopy(mission),
         "policy": {
             "id": pol_id,
@@ -283,7 +345,7 @@ def verify_passport(
 ) -> bool:
     """Verify passport signature against canonical bytes excluding 'signature'."""
     try:
-        data = passport.data if isinstance(passport, EvidencePassport) else passport
+        data = passport.to_dict() if isinstance(passport, EvidencePassport) else passport
         sig_block = data.get("signature")
         if not sig_block or not isinstance(sig_block, dict):
             return False
@@ -298,17 +360,33 @@ def verify_passport(
 
 
 def verify_dataset_hash(
-    dataset_path: str | Path,
+    dataset_path: str | Path | bytes,
     passport: EvidencePassport | dict[str, Any],
 ) -> bool:
-    """Verify dataset file SHA-256 against the recorded hash in passport."""
+    """Verify dataset file SHA-256 (or canonical CSV content SHA-256) against passport."""
     try:
-        data = passport.data if isinstance(passport, EvidencePassport) else passport
-        expected_sha = data.get("dataset", {}).get("sha256")
+        data = passport.to_dict() if isinstance(passport, EvidencePassport) else passport
+        d_block = data.get("dataset", {})
+        expected_sha = d_block.get("sha256")
+        expected_canon = d_block.get("canonical_sha256")
         if not expected_sha or not isinstance(expected_sha, str):
             return False
 
+        if isinstance(dataset_path, bytes):
+            actual_sha = hashlib.sha256(dataset_path).hexdigest()
+            if actual_sha.lower() == expected_sha.lower():
+                return True
+            if expected_canon:
+                actual_canon = hash_canonical_csv(dataset_path)
+                return actual_canon.lower() == expected_canon.lower()
+            return False
+
         actual_sha = hash_dataset_file(dataset_path)
-        return actual_sha.lower() == expected_sha.lower()
+        if actual_sha.lower() == expected_sha.lower():
+            return True
+        if expected_canon:
+            actual_canon = hash_canonical_csv(dataset_path)
+            return actual_canon.lower() == expected_canon.lower()
+        return False
     except Exception:
         return False

@@ -47,4 +47,21 @@ def validate_repair_action(action: str, params: dict[str, Any] | None = None) ->
         if target and target not in ("CTGAN", "GaussianCopula"):
             return False, f"Generator '{target}' is not supported"
 
+    if action == "enable_dp_training":
+        eps = params.get("epsilon") or params.get("eps")
+        if eps is not None:
+            try:
+                if float(eps) <= 0:
+                    return False, "Differential privacy epsilon must be strictly positive"
+            except (ValueError, TypeError):
+                return False, "Differential privacy epsilon must be a numeric value"
+        delta = params.get("delta")
+        if delta is not None:
+            try:
+                d_val = float(delta)
+                if not (0 <= d_val < 1.0):
+                    return False, "Differential privacy delta must be in [0, 1)"
+            except (ValueError, TypeError):
+                return False, "Differential privacy delta must be a numeric value"
+
     return True, "Accepted"

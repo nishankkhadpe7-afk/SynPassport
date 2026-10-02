@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -267,8 +268,23 @@ async def get_run_events(run_id: str) -> StreamingResponse:
     response_model=ApproveResponse,
     summary="Authorize human release approval and re-sign passport",
 )
-def approve_run(run_id: str, payload: ApproveRequest) -> ApproveResponse:
+def approve_run(
+    run_id: str,
+    payload: ApproveRequest,
+    request: Request,
+) -> ApproveResponse:
     """Record human approver identifier and re-sign Evidence Passport."""
+    expected_token = os.environ.get("SYNPASSPORT_APPROVAL_TOKEN")
+    if expected_token:
+        auth_header = request.headers.get("authorization", "")
+        bearer_token = auth_header.replace("Bearer ", "").strip() if "Bearer " in auth_header else ""
+        provided_token = payload.token or bearer_token or auth_header
+        if not provided_token or provided_token != expected_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or missing approval authorization token",
+            )
+
     run = run_store.get_run(run_id)
     if not run:
         raise HTTPException(
@@ -366,7 +382,7 @@ def get_run_sufficiency(run_id: str) -> SufficiencyResponse:
     subgroup_items: list[SubgroupSufficiencyItem] = []
 
     for query in critical_subgroups:
-        res = checker.run(real_df, None, subgroup_query=query)
+        res = checker.run(real_df, pd.DataFrame(), subgroup_query=query)
         meta = getattr(res, "metadata", {}) or {}
         subgroup_items.append(
             SubgroupSufficiencyItem(

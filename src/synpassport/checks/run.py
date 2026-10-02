@@ -27,7 +27,6 @@ CHECK_REGISTRY: dict[str, BaseCheck] = {
     "correlation_fidelity": CorrelationFidelityCheck(),
     "utility_tstr_ratio": UtilityTSTRCheck(),
     "subgroup_utility_ci": SubgroupUtilityCheck(),
-    "subgroup_utility_ci_width": SubgroupUtilityCheck(),
     "privacy_dcr_vs_holdout": DCRVsHoldoutCheck(),
     "membership_inference_auc": MembershipInferenceCheck(),
     "sufficiency": SufficiencyCheck(),
@@ -69,12 +68,8 @@ def run_checks_pipeline(
 
     # Execute checks
     evidence_records: list[EvidenceRecord] = []
-    executed_check_ids: set[str] = set()
 
     for check_id, threshold_spec in requires.items():
-        if check_id in executed_check_ids:
-            continue
-
         check_instance = CHECK_REGISTRY.get(check_id)
         if not check_instance:
             continue
@@ -86,7 +81,7 @@ def run_checks_pipeline(
             "subgroup_query": subgroup_query,
         }
 
-        if check_id in ("utility_tstr_ratio", "subgroup_utility_ci", "subgroup_utility_ci_width"):
+        if check_id in ("utility_tstr_ratio", "subgroup_utility_ci"):
             result: CheckResult = check_instance.run(train_df, synth_df, **check_kwargs)
         else:
             result = check_instance.run(real_df, synth_df, **check_kwargs)
@@ -105,7 +100,6 @@ def run_checks_pipeline(
             metadata=result.metadata,
         )
         evidence_records.append(rec)
-        executed_check_ids.add(check_id)
 
     # Persist to SQLite evidence store
     store = EvidenceStore(db_path=db_path)

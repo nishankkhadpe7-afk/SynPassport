@@ -112,9 +112,21 @@ class DCRVsHoldoutCheck(BaseCheck):
         exact_train_matches = int(np.sum(min_d_train < 1e-5))
         exact_holdout_matches = int(np.sum(min_d_holdout < 1e-5))
 
-        # Fraction of records closer to training than holdout
-        closer_to_train_count = int(np.sum(min_d_train < (min_d_holdout - 1e-5)))
-        fraction_closer_to_train = float(closer_to_train_count / len(syn_mat))
+        # Bootstrap CI for fraction-closer-to-train statistic
+        indices = np.arange(len(syn_mat))
+
+        def _frac_closer(idx_sample: Any) -> float:
+            idx_arr = np.array(idx_sample)
+            d_tr = min_d_train[idx_arr]
+            d_ho = min_d_holdout[idx_arr]
+            if len(d_tr) == 0:
+                return 0.0
+            return float(np.sum(d_tr < (d_ho - 1e-5)) / len(d_tr))
+
+        n_resamples = int(kwargs.get("n_resamples", 1000))
+        fraction_closer_to_train, ci_l, ci_h = compute_bootstrap_ci(
+            indices, _frac_closer, n_resamples=n_resamples, seed=seed
+        )
 
         # Median difference: median(d_train) - median(d_holdout)
         median_diff = float(np.median(min_d_train) - np.median(min_d_holdout))
@@ -123,9 +135,14 @@ class DCRVsHoldoutCheck(BaseCheck):
         if exact_train_matches > exact_holdout_matches and exact_train_matches > 0:
             state = "FAIL"
             score = -1.0
-        elif fraction_closer_to_train > 0.60 and median_diff < -0.05:
+        elif ci_l > 0.60 and median_diff < -0.05:
+            # Lower CI bound exceeds 60% -> memorization signal is robust
             state = "FAIL"
-            score = median_diff
+            score = float(median_diff)
+        elif ci_h > 0.60 and median_diff < -0.05:
+            # CI spans the 60% threshold -> evidence is insufficient
+            state = "INSUFFICIENT_EVIDENCE"
+            score = float(fraction_closer_to_train)
         else:
             state = "PASS"
             score = max(0.0, float(1.0 - fraction_closer_to_train))
@@ -133,6 +150,8 @@ class DCRVsHoldoutCheck(BaseCheck):
         return CheckResult(
             check_id=self.check_id,
             value=score,
+            ci_low=ci_l,
+            ci_high=ci_h,
             n=len(synth_data),
             seed=seed,
             state=state,

@@ -67,6 +67,7 @@ class ApproveRequest(BaseModel):
     """Human approval request payload."""
 
     approver: str = Field(..., description="Email or identifier of authorized approver")
+    token: str | None = Field(None, description="Optional bearer token or API key for approval authorization")
 
 
 class ApproveResponse(BaseModel):

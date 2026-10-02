@@ -22,11 +22,13 @@ from typing import Any
 
 from synpassport.checks.run import run_checks_pipeline
 from synpassport.passport.builder import approve_passport, build_passport
+from synpassport.passport.keygen import generate_keypair
+from synpassport.passport.trust import TrustedKeyRegistry
 from synpassport.policy.engine import evaluate_policy
 from synpassport.policy.loader import load_policy
 from synpassport.sdk.verify import verify
 
-__all__ = ["handle_approve", "handle_inspect", "handle_issue", "handle_verify", "main"]
+__all__ = ["handle_approve", "handle_inspect", "handle_issue", "handle_keyreg", "handle_verify", "main"]
 
 
 def _exit_code_for_reason(reason_code: str) -> int:
@@ -35,6 +37,8 @@ def _exit_code_for_reason(reason_code: str) -> int:
         return 0
     if reason_code in (
         "SIGNATURE_INVALID",
+        "KEY_UNTRUSTED",
+        "PASSPORT_EXPIRED",
         "DATASET_HASH_MISMATCH",
         "PURPOSE_UNSUPPORTED",
         "APPROVAL_MISSING",
@@ -79,13 +83,18 @@ def handle_verify(args: argparse.Namespace) -> int:
             print(f"Error: Passport file not found: {pass_path}", file=sys.stderr)
         return 2
 
-    pub_key = args.public_key or args.key
+    pub_key = args.public_key or getattr(args, "key", None)
+    registry_path = getattr(args, "registry", None)
+    max_age_days = getattr(args, "max_age_days", None)
+
     result = verify(
         dataset_path=data_path,
         passport_path=pass_path,
         purpose=args.purpose,
         allow_warning=args.allow_warning,
         public_key=pub_key,
+        registry_path=registry_path,
+        max_age_days=max_age_days,
     )
 
     if args.json:
@@ -201,6 +210,71 @@ def handle_approve(args: argparse.Namespace) -> int:
         return 2
 
 
+def handle_keyreg(args: argparse.Namespace) -> int:
+    """Manage the trusted key registry (enroll, revoke, list)."""
+    try:
+        reg_path = Path(args.registry)
+        registry = TrustedKeyRegistry.from_file(reg_path)
+
+        if args.keyreg_command == "enroll":
+            key_path = Path(args.public_key)
+            if not key_path.is_file():
+                print(f"Error: public key file not found: {key_path}", file=sys.stderr)
+                return 2
+            key_bytes = key_path.read_bytes()
+            fp = registry.add_key(
+                label=args.label,
+                public_key=key_bytes,
+                expires_at=getattr(args, "expires_at", None),
+                comment=getattr(args, "comment", ""),
+            )
+            registry.save(reg_path)
+            print(f"Enrolled key '{args.label}' with fingerprint: {fp}")
+            print(f"Registry saved to: {reg_path}")
+
+        elif args.keyreg_command == "revoke":
+            reason = getattr(args, "reason", "")
+            registry.revoke_key(args.label, reason=reason)
+            registry.save(reg_path)
+            print(f"Revoked key '{args.label}'. Registry saved to: {reg_path}")
+
+        elif args.keyreg_command == "list":
+            entries = registry.active_entries()
+            if not entries:
+                print("No active keys in registry.")
+            else:
+                print(f"Active keys in {reg_path}:")
+                for label, entry in entries.items():
+                    fp = str(entry.get("fingerprint", ""))[:16]
+                    added = entry.get("added_at", "unknown")
+                    expires = entry.get("expires_at") or "never"
+                    comment = entry.get("comment", "")
+                    print(f"  [{label}] fp={fp}... added={added} expires={expires} {comment}")
+
+        elif args.keyreg_command == "generate":
+            # Convenience: generate keypair AND enroll the public key
+            out_dir = Path(getattr(args, "output_dir", "./keys"))
+            priv_path, pub_path, key_id = generate_keypair(out_dir, key_name=args.label)
+            pub_bytes = pub_path.read_bytes()
+            fp = registry.add_key(
+                label=args.label,
+                public_key=pub_bytes,
+                expires_at=getattr(args, "expires_at", None),
+                comment=getattr(args, "comment", "auto-generated"),
+            )
+            registry.save(reg_path)
+            print(f"Generated keypair for '{args.label}'.")
+            print(f"  Private key: {priv_path}")
+            print(f"  Public key:  {pub_path}")
+            print(f"  Fingerprint: {fp}")
+            print(f"  Registry:    {reg_path}")
+
+        return 0
+    except Exception as exc:
+        print(f"Error in keyreg operation: {exc}", file=sys.stderr)
+        return 2
+
+
 def handle_inspect(args: argparse.Namespace) -> int:
     """Display contents and verification metrics of an Evidence Passport."""
     try:
@@ -276,6 +350,18 @@ def create_parser() -> argparse.ArgumentParser:
     verify_p.add_argument(
         "--public-key", "--key", dest="public_key", help="Path to Ed25519 public key PEM"
     )
+    verify_p.add_argument(
+        "--registry",
+        dest="registry",
+        help="Path to trusted key registry JSON (preferred over --public-key for production)",
+    )
+    verify_p.add_argument(
+        "--max-age-days",
+        dest="max_age_days",
+        type=int,
+        default=None,
+        help="Reject passports older than this many days",
+    )
     verify_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
 
     # Subcommand: issue
@@ -319,6 +405,40 @@ def create_parser() -> argparse.ArgumentParser:
     inspect_p.add_argument("passport", help="Path to Evidence Passport JSON")
     inspect_p.add_argument("--json", action="store_true", help="Output raw passport JSON")
 
+    # Subcommand: keyreg (trusted key registry management)
+    keyreg_p = subparsers.add_parser(
+        "keyreg", help="Manage the trusted issuer key registry"
+    )
+    keyreg_p.add_argument(
+        "--registry", required=True, dest="registry",
+        help="Path to trusted key registry JSON file"
+    )
+    keyreg_sub = keyreg_p.add_subparsers(dest="keyreg_command", required=True)
+
+    enroll_p = keyreg_sub.add_parser("enroll", help="Enroll a public key into the registry")
+    enroll_p.add_argument("--label", required=True, help="Unique label for this key")
+    enroll_p.add_argument("--public-key", required=True, dest="public_key",
+                          help="Path to Ed25519 public key PEM")
+    enroll_p.add_argument("--expires-at", dest="expires_at",
+                          help="Optional ISO-8601 expiry datetime")
+    enroll_p.add_argument("--comment", default="", help="Audit comment")
+
+    revoke_p = keyreg_sub.add_parser("revoke", help="Revoke a key in the registry")
+    revoke_p.add_argument("--label", required=True, help="Label of the key to revoke")
+    revoke_p.add_argument("--reason", default="", help="Revocation reason for audit")
+
+    keyreg_sub.add_parser("list", help="List active keys in the registry")
+
+    gen_p = keyreg_sub.add_parser(
+        "generate", help="Generate a new Ed25519 keypair and enroll the public key"
+    )
+    gen_p.add_argument("--label", required=True, help="Unique label for this key")
+    gen_p.add_argument("--output-dir", dest="output_dir", default="./keys",
+                       help="Directory to write generated key files")
+    gen_p.add_argument("--expires-at", dest="expires_at",
+                       help="Optional ISO-8601 expiry datetime")
+    gen_p.add_argument("--comment", default="auto-generated", help="Audit comment")
+
     return parser
 
 
@@ -338,6 +458,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_approve(args)
     if args.command == "inspect":
         return handle_inspect(args)
+    if args.command == "keyreg":
+        return handle_keyreg(args)
 
     return 2
 

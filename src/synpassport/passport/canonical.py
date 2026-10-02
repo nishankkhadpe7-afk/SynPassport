@@ -14,6 +14,7 @@ from typing import Any
 __all__ = [
     "canonical_json_dumps",
     "canonical_hash",
+    "hash_canonical_csv",
     "hash_dataset_file",
     "normalize_for_canonical",
 ]
@@ -75,3 +76,26 @@ def hash_dataset_file(file_path: str | Path, chunk_size: int = 65536) -> str:
         while chunk := f.read(chunk_size):
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def hash_canonical_csv(source: str | Path | bytes) -> str:
+    """Compute normalized canonical SHA-256 hash of CSV content.
+
+    Normalizes Windows/Unix line endings (CRLF -> LF), trims trailing whitespace
+    per line, and strips trailing blank lines so re-saving or transferring across OS
+    does not break verification.
+    """
+    if isinstance(source, bytes):
+        raw_text = source.decode("utf-8", errors="replace")
+    else:
+        path = Path(source)
+        if not path.is_file():
+            raise FileNotFoundError(f"Dataset file does not exist: {path}")
+        raw_text = path.read_text(encoding="utf-8", errors="replace")
+
+    normalized_lines = [line.rstrip() for line in raw_text.replace("\r\n", "\n").split("\n")]
+    while normalized_lines and not normalized_lines[-1]:
+        normalized_lines.pop()
+
+    canonical_content = "\n".join(normalized_lines) + "\n"
+    return hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()

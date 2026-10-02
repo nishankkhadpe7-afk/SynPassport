@@ -31,18 +31,4 @@ class EvidenceRecord(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize evidence record to dictionary."""
-        return {
-            "run_id": self.run_id,
-            "candidate_id": self.candidate_id,
-            "check_id": self.check_id,
-            "value": self.value,
-            "ci_low": self.ci_low,
-            "ci_high": self.ci_high,
-            "n": self.n,
-            "threshold_ref": self.threshold_ref,
-            "seed": self.seed,
-            "code_version": self.code_version,
-            "state": self.state,
-            "metadata": self.metadata,
-            "created_at": self.created_at,
-        }
+        return self.model_dump()

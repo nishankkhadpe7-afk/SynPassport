@@ -144,11 +144,15 @@ def format_agent_context(
         lines.append("=== CANDIDATE EVALUATION AGGREGATES ===")
         for cand in candidate_history:
             cid = cand.get("candidate_id", "unknown")
-            metrics = cand.get("metrics", {})
             verdicts = cand.get("verdicts", {})
+            aggregates = {
+                "fail_count": cand.get("fail_count", 0),
+                "inconclusive_count": cand.get("inconclusive_count", 0),
+                "mean_score": round(cand.get("mean_score", 0.0), 4),
+            }
             lines.append(f"Candidate [{cid}]:")
             lines.append(f"  Verdicts: {verdicts}")
-            lines.append(f"  Aggregates: {metrics}")
+            lines.append(f"  Aggregates: {aggregates}")
 
     if agent_rejections:
         lines.append("")
