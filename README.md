@@ -19,8 +19,8 @@ Question answered: *given this purpose and this policy, is there enough evidence
 ### How It Works at a High Level
 1. **Purpose-First Ingestion**: The user declares an empirical mission (primary purpose, critical subgroups, risk mitigation level, and intended uses).
 2. **Pre-Registered Policy Profiles**: The assurance policy is selected and hashed with SHA-256 before testing begins; thresholds are immutable in code.
-3. **Separation of Powers**: An LLM agent explores generators, diagnoses failures, and selects from a strict whitelist of repairs (`tune_hyperparameters`, `switch_generator`; `enable_dp_training` is reserved and rejected until a differentially private generator is installed) under hard budget limits ($\le 3$ candidates, $\le 2$ repairs).
-4. **Isolated Adversarial Testing**: An independent evaluation engine runs 8 pre-registered checks (including holdout-isolated DCR distance and Membership Inference Attacks). The agent only observes aggregate metrics, never holdout records.
+3. **Separation of Powers**: An LLM agent (Groq or Gemini) diagnoses failures and selects from a strict whitelist of repairs (`regenerate_identifiers`, `switch_generator`, `tune_hyperparameters`) under hard budget limits ($\le 3$ candidates, $\le 2$ repairs). Invalid proposals are rejected and logged; if the LLM is unavailable, a rule-based planner takes over and the timeline says so.
+4. **Isolated Adversarial Testing**: An independent evaluation engine runs up to 9 pre-registered checks (including identifier leakage, holdout-isolated DCR distance and membership inference attacks). The agent only observes aggregate metrics, never data rows.
 5. **Deterministic Policy Engine**: A pure Python engine evaluates evidence rows against policy thresholds to assign independent verdicts (`PASS`, `WARNING`, `FAIL`, or `INSUFFICIENT_EVIDENCE`) per intended use.
 6. **Cryptographic Binding & Human Accountability**: The run produces a canonical JSON Evidence Passport bound to the raw dataset bytes via SHA-256 and signed with Ed25519. Final release requires an accountable human approver.
 7. **Downstream Enforcement**: The `load_dataset()` loader guard, `passport verify` CLI, and GitHub Action CI gate verify signatures, dataset hashes, and purpose compatibility before allowing consumption.
@@ -51,11 +51,11 @@ SynPassport converts synthetic data deployment from an unverified honor system i
 - **Explicit Uncertainty & Actionable Refusal**: Missing checks or wide confidence intervals yield `INSUFFICIENT_EVIDENCE`—never a weak or assumed pass.
 - **Ed25519 Signed & Hash-Bound Evidence Passports**: Canonical JSON serialization signed with Ed25519 and bound to the dataset's exact SHA-256 byte digest.
 - **Multi-Layer Enforcement**:
-  - *Python SDK Loader Guard*: `synpassport.load_dataset(path, purpose=...)` halts with `PassportTamperedError` on modified bytes or unsupported purposes.
+  - *Python SDK Loader Guard*: `synpassport.load_dataset(path, purpose=...)` raises `PassportError` (with a `reason_code` such as `DATASET_HASH_MISMATCH`) on modified bytes, bad signatures or unsupported purposes.
   - *CLI*: `passport verify` exits with explicit exit codes (`0` verified, `1` tampered/unsupported, `2` usage error).
   - *CI/CD Gate*: Composite GitHub Action failing CI pipelines on invalid passports.
 - **Next.js 14 Dashboard & FastAPI Backend**: Full dashboard in `web/` featuring live SSE agent timelines, budget meters, confidence interval drill-downs, DCR histograms, and a live tamper workbench.
-- **Deterministic Replay Mode**: Built-in deterministic replay (`SYNPASSPORT_REPLAY=1`) for offline testing and presentations.
+- **Deterministic Replay Mode**: With `SYNPASSPORT_REPLAY=1`, a run with the same dataset, mission, seed and policy version is served from `replay/` instead of calling the LLM again. A policy change invalidates old cache entries.
 
 ---
 
@@ -79,7 +79,7 @@ flowchart TD
     end
 
     subgraph EvalEngine["3. Pre-Registered Check Engine"]
-        Loop --> Checks["8 Empirical Checks & Adversarial Attacks"]
+        Loop --> Checks["9 Empirical Checks & Adversarial Attacks"]
         Split -. Isolated Holdout .-> Checks
         Checks --> Store[("SQLite Evidence Store<br/>Value, 95% CI, Seed, Git SHA")]
     end
@@ -130,9 +130,9 @@ SynPassport/
 │   └── ml-sensitive-v1.yaml     # High-assurance profile (adversarial attacks + subgroup CI)
 ├── src/synpassport/             # Core Python package
 │   ├── agent/                   # Agent loop, tool registry, and repair whitelist
-│   ├── api/                     # FastAPI backend (routers for runs, evidence, SSE, verify)
+│   ├── api/                     # FastAPI backend (routers for runs, evidence, DCR, SSE, policies, verify)
 │   ├── checks/                  # 9 pre-registered checks, privacy attacks, identifier handling
-│   ├── cli/                     # Typer / argparse CLI entrypoints (`passport`)
+│   ├── cli/                     # argparse CLI entrypoint (`passport`)
 │   ├── evidence/                # SQLite append-only evidence store and models
 │   ├── generators/              # Synthetic data generator interfaces (Gaussian Copula, CTGAN)
 │   ├── mission/                 # Mission schema and restricted subgroup expression parser
@@ -143,10 +143,11 @@ SynPassport/
 │   ├── src/app/                 # App Router pages, layout, and global styling
 │   ├── src/components/          # Dashboard components for all 7 screens
 │   ├── src/types/               # TypeScript interface declarations
+│   ├── src/fonts/               # Bundled wordmark font (Source Serif 4, SIL OFL)
 │   └── Dockerfile               # Production Next.js container configuration
 ├── examples/                    # Synthetic demo datasets (card transactions, heart disease)
 ├── .github/actions/verify/      # Composite GitHub Action for CI/CD pipeline gating
-├── replay/                      # Cached runs for presentation fallback (new runs are git-ignored)
+├── replay/                      # Local cache for replay mode (contents are git-ignored)
 ├── scripts/                     # End-to-end verification and pipeline scripts
 ├── tests/                       # Unit, property, and integration test suite (143 tests)
 ├── docker-compose.yml           # Multi-container orchestration (API + Web)
@@ -164,7 +165,7 @@ Launch the full stack (FastAPI backend on port 8000 + Next.js web dashboard on p
 # Standard live run
 docker compose up --build
 
-# Deterministic demo replay mode (recommended for live presentations)
+# Replay mode: re-serves runs already cached in replay/ (run each demo once live first)
 SYNPASSPORT_REPLAY=1 docker compose up --build
 ```
 
@@ -222,13 +223,30 @@ On Windows without Docker, double-click `start-synpassport.bat` to do both. The 
 `web/.env.local` (`NEXT_PUBLIC_API_URL=http://127.0.0.1:8765`). Put your LLM key in `.env`
 (`LLM_API_KEY=...`, a Groq `gsk_` key works); without one, a rule-based planner makes the repair decisions.
 
+### Configuration (`.env`)
+
+| Variable | Purpose |
+|---|---|
+| `LLM_API_KEY` | Groq (`gsk_...`) or Gemini key for the repair agent. Empty = rule-based planner. `GROQ_API_KEY` also works. |
+| `LLM_MODEL` | Optional model override (Groq default: `qwen/qwen3.8-27b`). |
+| `DATA_DIR` | Where runs, evidence and the server signing keypair are stored (default `./data`). |
+| `SYNPASSPORT_REPLAY` | `1` = serve identical runs from `replay/`. |
+| `SYNPASSPORT_APPROVER_TOKEN` | If set, approving a release requires this value in the `X-Approver-Token` header. |
+| `SYNPASSPORT_PUBLIC_KEY` | Trusted issuer public key for `passport verify` and the SDK. |
+| `CORS_ORIGINS` | Extra browser origins allowed to call the API (comma separated). |
+
+Optional: `pip install -e ".[ctgan]"` installs CTGAN (with PyTorch) for real CTGAN training.
+
 ---
 
 ## Usage Guide
 
 ### 1. Command-Line Interface (`passport`)
 
-The CLI exposes four subcommands for verification, issuance, approval, and inspection:
+The CLI exposes four subcommands for verification, issuance, approval, and inspection.
+Create a signing keypair first with `python -m synpassport.passport.keygen` (writes `keys/ed25519_private.pem`
+and `keys/ed25519_public.pem`). Passports issued by the dashboard API are signed with the server key in
+`data/keys/api_private.pem`; verify them with `data/keys/api_public.pem`.
 
 ```bash
 # 1. Cryptographically verify a synthetic dataset against an Evidence Passport.
@@ -319,8 +337,8 @@ The web dashboard ([`web/`](web/)) provides a 7-screen assurance cockpit:
 3. **Verdict Board**: One card per intended use with the policy's required checks; the reasons are built from the signed candidate's actual check results.
 4. **Evidence Drill-Down**: Every check with its value, 95% confidence interval and policy threshold, labelled with the candidate the passport signs, plus distance-to-closest-record histograms computed from the run's own files (`GET /runs/{id}/dcr`).
 5. **Sufficiency Panel**: Subgroup power analysis: how many records the critical subgroup has, how many it needs, and the resulting confidence-interval width.
-6. **Passport Panel**: Syntax-highlighted canonical JSON viewer, download button, human approval modal (`POST /runs/{id}/approve`), and cryptographic verification trigger.
-7. **Tamper Demo Workbench**: Dual-panel demonstration. Panel 1 runs live verification on modified CSVs and displays `DATASET_HASH_MISMATCH` with digest divergence. Panel 2 displays the terminal loader guard exception (`PassportTamperedError`).
+6. **Passport Panel**: Dataset hash, policy hash and Ed25519 signature, the canonical JSON with copy and download, human approval (`POST /runs/{id}/approve`, optionally protected by `SYNPASSPORT_APPROVER_TOKEN`), and server-side verification.
+7. **Tamper Test**: Loads the exact file the passport signs, lets you change one cell (or edit freely), recomputes the SHA-256 in the browser and asks the server to verify. A changed file fails with `DATASET_HASH_MISMATCH`, and the loader-guard panel shows the `PassportError` a training script would get.
 
 ---
 
@@ -335,7 +353,7 @@ Two synthetic demo datasets (made-up records, no real people) are in [`examples/
 | File | Rows | Setup | What it shows |
 |---|---|---|---|
 | `card_transactions_4000.csv` | 4,000 | Target `is_fraud`, subgroup `age >= 65` | Candidate 1 copies real transaction IDs, card hashes and IPs, so **identifier leakage fails**. The agent applies `regenerate_identifiers`; candidate 2 passes software testing. With ML uses ticked, ML prototyping still fails (utility too low for a rare fraud label): approved for testing, blocked for ML. |
-| `heart_disease_5000.csv` | 5,000 | Target `target`, subgroup `age >= 65`, tick Clinical ML | The clinical policy (`ml-sensitive-v1`) is selected. Candidate 1 is **insufficient evidence** for clinical ML (membership-inference CI crosses 0.55); the agent tries CTGAN and longer training. |
+| `heart_disease_5000.csv` | 5,000 | Target `target`, subgroup `age >= 65`, tick Clinical ML | The clinical policy (`ml-sensitive-v1`) is selected. Candidate 1 passes software testing and ML prototyping but is **insufficient evidence** for clinical ML (membership-inference CI crosses 0.55); the agent tries CTGAN and longer training, and the best candidate is kept. |
 
 ### Golden-Path Presentation Script
 
@@ -348,7 +366,7 @@ Two synthetic demo datasets (made-up records, no real people) are in [`examples/
 | **5. Passport and tamper test** | Approve the passport, then in *Tamper test* change one cell: verification fails with `DATASET_HASH_MISMATCH`. | Cryptographic binding |
 | **6. Loader guard** | `synpassport.load_dataset(path, purpose=...)` refuses the modified file before any training starts. | Enforcement in code |
 
-> **Presentation Note**: If live agent synthesis is impacted by network or model provider latency, enable deterministic replay mode with `SYNPASSPORT_REPLAY=1`.
+> **Presentation Note**: Run each demo once live before presenting. Then, if the network or LLM is slow, set `SYNPASSPORT_REPLAY=1` and the same runs are served from `replay/`. Without an LLM key the rule-based planner still makes whitelisted repairs.
 
 ---
 
@@ -357,9 +375,6 @@ Two synthetic demo datasets (made-up records, no real people) are in [`examples/
 ```bash
 # Run unit, property, and integration tests (143 tests)
 pytest -q
-
-# Run end-to-end replay-mode tests
-pytest -m e2e
 
 # Run code style and linter checks
 python -m ruff check .
@@ -389,9 +404,3 @@ python scripts/run_pipeline.py
    - Does not certify statutory regulatory adherence (e.g., HIPAA, GDPR, DPDP).
    - Does not replace human release approval when required by policy.
    - Evaluates empirical evidence under specified attacks and pre-registered statistical checks; supports audit.
-
----
-
-## License
-
-This project is licensed under the Apache 2.0 License. See `LICENSE` for details.
