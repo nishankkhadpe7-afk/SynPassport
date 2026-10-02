@@ -80,6 +80,8 @@ SynPassport provides comprehensive technical READMEs for every architectural com
 - ⚙️ **[Synthetic Data Generators (`synpassport.generators`)](file:///Users/vanshjain/Desktop/SynPassport/src/synpassport/generators/README.md)** — GaussianCopula, CTGAN, and Differential Privacy (DP) training integrations.
 - 🎯 **[Mission Profile (`synpassport.mission`)](file:///Users/vanshjain/Desktop/SynPassport/src/synpassport/mission/README.md)** — Intent specification.
 - 🔐 **[Security Architecture & Defenses](file:///Users/vanshjain/Desktop/SynPassport/docs/SECURITY.md)** — Complete threat model, TOCTOU defense, prompt sanitization, token auth.
+- 📜 **[Detailed Changelog & Commit Log](file:///Users/vanshjain/Desktop/SynPassport/CHANGELOG.md)** — Comprehensive record of every commit, feature addition, and bug fix over time. Automatically updated on every git commit.
+
 
 
 ```mermaid

@@ -32,3 +32,6 @@ Each core component of SynPassport features dedicated technical documentation:
   - Domain intent specification.
 - 🔐 **[Security Architecture & Defenses](file:///Users/vanshjain/Desktop/SynPassport/docs/SECURITY.md)**
   - Complete security model covering TOCTOU mitigations, prompt sanitization, cryptographically locked policies, and token authentication.
+- 📜 **[Detailed Changelog & Commit Log](file:///Users/vanshjain/Desktop/SynPassport/CHANGELOG.md)**
+  - Full history of all commits, features, and file modifications over time. Auto-updates on every commit.
+

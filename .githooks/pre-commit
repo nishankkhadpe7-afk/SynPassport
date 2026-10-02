@@ -1,0 +1,13 @@
+#!/bin/sh
+# Git pre-commit hook for SynPassport
+# Automatically updates CHANGELOG.md before finalizing a git commit
+
+PYTHON_EXEC="/Users/vanshjain/.local/bin/python3.11"
+if [ ! -f "$PYTHON_EXEC" ]; then
+    PYTHON_EXEC="python3"
+fi
+
+echo "🔄 Running automated changelog update..."
+"$PYTHON_EXEC" scripts/update_changelog.py
+git add CHANGELOG.md docs/CHANGELOG.md 2>/dev/null || true
+echo "✅ CHANGELOG.md updated and staged."

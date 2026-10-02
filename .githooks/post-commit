@@ -1,0 +1,10 @@
+#!/bin/sh
+# Git post-commit hook for SynPassport
+# Refreshes CHANGELOG.md with the freshly created commit metadata
+
+PYTHON_EXEC="/Users/vanshjain/.local/bin/python3.11"
+if [ ! -f "$PYTHON_EXEC" ]; then
+    PYTHON_EXEC="python3"
+fi
+
+"$PYTHON_EXEC" scripts/update_changelog.py >/dev/null 2>&1 || true
